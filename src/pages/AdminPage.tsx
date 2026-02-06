@@ -20,24 +20,36 @@ const AdminPage = () => {
   const handleFetchAndProcess = async () => {
     setIsFetching(true);
     try {
-      toast({ title: "שולף תוכן ממקורות..." });
+      toast({ title: "🔄 שולף תוכן ממקורות..." });
       const fetchResult = await adminApi.fetchContent(password);
       toast({
-        title: `נשלפו ${fetchResult.fetched} פריטים`,
+        title: `נשלפו ${fetchResult.fetched} פריטים חדשים`,
         description: fetchResult.errors?.length
           ? `${fetchResult.errors.length} שגיאות`
           : undefined,
       });
 
-      if (fetchResult.fetched > 0) {
-        toast({ title: "מעבד תוכן עם AI..." });
+      // Process ALL pending unprocessed suggestions (loop until done)
+      let totalProcessed = 0;
+      let hasMore = true;
+      toast({ title: "🤖 מעבד תוכן עם AI..." });
+
+      while (hasMore) {
         const processResult = await adminApi.processContent(password);
-        toast({
-          title: `עובדו ${processResult.processed} הצעות`,
-          description: processResult.errors?.length
-            ? `${processResult.errors.length} שגיאות`
-            : undefined,
-        });
+        totalProcessed += processResult.processed || 0;
+
+        if (processResult.errors?.length) {
+          console.warn("Process errors:", processResult.errors);
+        }
+
+        // If processed less than batch size (5), we're done
+        hasMore = (processResult.processed || 0) >= 5;
+      }
+
+      if (totalProcessed > 0) {
+        toast({ title: `✅ עובדו ${totalProcessed} הצעות — מוכנות לאישור` });
+      } else if (fetchResult.fetched === 0) {
+        toast({ title: "אין תוכן חדש לעיבוד" });
       }
     } catch (err) {
       toast({
