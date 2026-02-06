@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -18,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Check, X, Pencil, ExternalLink, Loader2 } from "lucide-react";
+import { Check, X, Pencil, ExternalLink, Loader2, CheckSquare } from "lucide-react";
 import { adminApi } from "@/lib/adminApi";
 import { toast } from "@/hooks/use-toast";
 
@@ -39,11 +40,39 @@ const STATUS_LABELS: Record<string, string> = {
   rejected: "נדחה",
 };
 
+/** Build a meaningful display title from suggestion data */
+function getDisplayTitle(suggestion: any): string {
+  // Best case: AI-generated title
+  if (suggestion.suggested_title) return suggestion.suggested_title;
+
+  // For tweets: show first ~80 chars of tweet text
+  if (suggestion.source_url?.includes("x.com/") && suggestion.original_content) {
+    const text = suggestion.original_content.substring(0, 100).replace(/https?:\/\/\S+/g, "").trim();
+    return text.length > 80 ? text.substring(0, 80) + "…" : text || suggestion.original_title || "ללא כותרת";
+  }
+
+  // For websites with content: extract first meaningful line
+  if (suggestion.original_content && suggestion.original_title) {
+    const title = suggestion.original_title;
+    // If it looks like a generic site name (short, no spaces, or just brand)
+    if (title.length < 30 && !title.includes(" — ") && !title.includes(":")) {
+      // Try to extract a headline from content
+      const lines = suggestion.original_content.split("\n").filter((l: string) => l.trim().length > 10);
+      const headline = lines.find((l: string) => l.startsWith("#"));
+      if (headline) return headline.replace(/^#+\s*/, "").substring(0, 100);
+    }
+    return title;
+  }
+
+  return suggestion.original_title || "ללא כותרת";
+}
+
 const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>("pending");
   const [sectionFilter, setSectionFilter] = useState<string>("all");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editForm, setEditForm] = useState({
     title: "",
     excerpt: "",
@@ -97,6 +126,48 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
     },
   });
 
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+
+  const bulkApprove = async () => {
+    if (selectedIds.size === 0) return;
+    setIsBulkProcessing(true);
+    let approved = 0;
+    let failed = 0;
+    for (const id of selectedIds) {
+      try {
+        await adminApi.managePosts(password, "approve", id);
+        approved++;
+      } catch {
+        failed++;
+      }
+    }
+    queryClient.invalidateQueries({ queryKey: ["suggestions"] });
+    setSelectedIds(new Set());
+    setIsBulkProcessing(false);
+    toast({
+      title: `אושרו ${approved} פוסטים`,
+      description: failed > 0 ? `${failed} נכשלו (ייתכן שטרם עובדו)` : undefined,
+    });
+  };
+
+  const bulkReject = async () => {
+    if (selectedIds.size === 0) return;
+    setIsBulkProcessing(true);
+    let rejected = 0;
+    for (const id of selectedIds) {
+      try {
+        await adminApi.managePosts(password, "reject", id);
+        rejected++;
+      } catch {
+        // skip
+      }
+    }
+    queryClient.invalidateQueries({ queryKey: ["suggestions"] });
+    setSelectedIds(new Set());
+    setIsBulkProcessing(false);
+    toast({ title: `נדחו ${rejected} הצעות` });
+  };
+
   const openEdit = (suggestion: any) => {
     setEditForm({
       title: suggestion.suggested_title || suggestion.original_title || "",
@@ -106,6 +177,42 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
       tag: suggestion.suggested_tag || "",
     });
     setEditingId(suggestion.id);
+  };
+
+  const pendingSuggestions = useMemo(
+    () => (suggestions || []).filter((s: any) => s.status === "pending"),
+    [suggestions]
+  );
+
+  const processedPendingIds = useMemo(
+    () =>
+      new Set(
+        pendingSuggestions
+          .filter((s: any) => !!s.suggested_title && !!s.suggested_content)
+          .map((s: any) => s.id)
+      ),
+    [pendingSuggestions]
+  );
+
+  const allProcessedSelected =
+    processedPendingIds.size > 0 &&
+    [...processedPendingIds].every((id) => selectedIds.has(id));
+
+  const toggleSelectAll = () => {
+    if (allProcessedSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(processedPendingIds));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   return (
@@ -137,6 +244,50 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
         </Select>
       </div>
 
+      {/* Bulk actions bar */}
+      {statusFilter === "pending" && pendingSuggestions.length > 0 && (
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-muted border border-border">
+          <Checkbox
+            checked={allProcessedSelected}
+            onCheckedChange={toggleSelectAll}
+            id="select-all"
+          />
+          <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+            בחר הכל ({processedPendingIds.size} מעובדים)
+          </label>
+
+          {selectedIds.size > 0 && (
+            <>
+              <span className="text-sm text-muted-foreground mr-auto">
+                {selectedIds.size} נבחרו
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-destructive border-destructive/30"
+                onClick={bulkReject}
+                disabled={isBulkProcessing}
+              >
+                <X className="h-3.5 w-3.5 ml-1" />
+                דחה נבחרים
+              </Button>
+              <Button
+                size="sm"
+                onClick={bulkApprove}
+                disabled={isBulkProcessing}
+              >
+                {isBulkProcessing ? (
+                  <Loader2 className="h-3.5 w-3.5 ml-1 animate-spin" />
+                ) : (
+                  <CheckSquare className="h-3.5 w-3.5 ml-1" />
+                )}
+                אשר נבחרים
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Suggestions List */}
       {isLoading ? (
         <div className="flex justify-center py-12">
@@ -150,14 +301,24 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
         <div className="space-y-4">
           {suggestions.map((suggestion: any) => {
             const isProcessed = !!suggestion.suggested_title && !!suggestion.suggested_content;
+            const displayTitle = getDisplayTitle(suggestion);
+            const isSelected = selectedIds.has(suggestion.id);
 
             return (
-              <Card key={suggestion.id} className="overflow-hidden">
+              <Card key={suggestion.id} className={`overflow-hidden transition-colors ${isSelected ? "border-primary/50 bg-primary/5" : ""}`}>
                 <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    {suggestion.status === "pending" && (
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => toggleSelect(suggestion.id)}
+                        disabled={!isProcessed}
+                        className="mt-1 shrink-0"
+                      />
+                    )}
                     <div className="flex-1 min-w-0">
                       <CardTitle className="text-base leading-tight mb-2">
-                        {suggestion.suggested_title || suggestion.original_title || "ללא כותרת"}
+                        {displayTitle}
                       </CardTitle>
                       <div className="flex flex-wrap gap-2">
                         {suggestion.suggested_section && (
@@ -183,7 +344,7 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
                           {STATUS_LABELS[suggestion.status]}
                         </Badge>
                         {suggestion.status === "pending" && !isProcessed && (
-                          <Badge variant="outline" className="text-xs border-yellow-500 text-yellow-500">
+                          <Badge variant="outline" className="text-xs border-amber-500/50 text-amber-500">
                             ⏳ טרם עובד
                           </Badge>
                         )}
@@ -217,7 +378,7 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
                     {suggestion.status === "pending" && (
                       <div className="flex gap-2 items-center">
                         {!isProcessed && (
-                          <span className="text-xs text-yellow-500 mr-2">יש להריץ עיבוד תוכן תחילה</span>
+                          <span className="text-xs text-amber-500 mr-2">יש להריץ עיבוד תוכן תחילה</span>
                         )}
                         <Button
                           size="sm"
