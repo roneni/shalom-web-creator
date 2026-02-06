@@ -361,11 +361,6 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
                         >
                           {STATUS_LABELS[suggestion.status]}
                         </Badge>
-                        {suggestion.status === "pending" && !isProcessed && (
-                          <Badge variant="outline" className="text-xs border-amber-500/50 text-amber-500">
-                            ⏳ טרם עובד
-                          </Badge>
-                        )}
                       </div>
                     </div>
                     {suggestion.source_url && (
@@ -395,9 +390,6 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
 
                     {suggestion.status === "pending" && (
                       <div className="flex gap-2 items-center">
-                        {!isProcessed && (
-                          <span className="text-xs text-amber-500 mr-2">יש להריץ עיבוד תוכן תחילה</span>
-                        )}
                         <Button
                           size="sm"
                           variant="ghost"
@@ -418,8 +410,7 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
                         <Button
                           size="sm"
                           onClick={() => approveMutation.mutate({ id: suggestion.id })}
-                          disabled={approveMutation.isPending || !isProcessed}
-                          title={!isProcessed ? "יש להריץ עיבוד תוכן לפני אישור" : ""}
+                          disabled={approveMutation.isPending}
                         >
                           <Check className="h-3.5 w-3.5 mr-1" />
                           אשר
