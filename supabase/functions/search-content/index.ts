@@ -241,6 +241,11 @@ Deno.serve(async (req) => {
 
         for (const item of recentItems) {
           if (!isNewUrl(item.link)) continue;
+          if (isIndexPage(item.link)) continue;
+          if (isFinanceContent(item.title)) {
+            console.log(`  RSS skipped finance: "${item.title.substring(0, 60)}"`);
+            continue;
+          }
 
           const content = item.description || item.title;
           if (content.length < 20) continue;
