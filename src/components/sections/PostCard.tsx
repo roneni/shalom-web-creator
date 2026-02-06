@@ -1,0 +1,34 @@
+import { Link } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
+import type { Post } from "@/data/mockData";
+
+interface PostCardProps {
+  post: Post;
+}
+
+const PostCard = ({ post }: PostCardProps) => {
+  return (
+    <Link to={`/post/${post.slug}`} className="group block">
+      <article className="rounded-xl bg-card border border-border hover:border-primary/30 transition-all duration-300 hover:glow-sm p-6">
+        <div className="flex items-center gap-3 mb-3">
+          <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-primary/10 text-primary">
+            {post.tag}
+          </span>
+          <span className="text-xs text-muted-foreground">{post.date}</span>
+        </div>
+        <h3 className="text-lg font-bold mb-2 group-hover:text-primary transition-colors leading-snug">
+          {post.title}
+        </h3>
+        <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+          {post.excerpt}
+        </p>
+        <div className="flex items-center gap-1.5 text-sm font-medium text-primary">
+          <span>קראו עוד</span>
+          <ArrowLeft className="h-3.5 w-3.5 group-hover:-translate-x-1 transition-transform" />
+        </div>
+      </article>
+    </Link>
+  );
+};
+
+export default PostCard;
