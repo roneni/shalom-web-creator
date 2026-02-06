@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RefreshCw, LogOut, Loader2 } from "lucide-react";
+import { RefreshCw, LogOut, Loader2, Search } from "lucide-react";
 import { useAdmin } from "@/hooks/useAdmin";
 import { adminApi } from "@/lib/adminApi";
 import { toast } from "@/hooks/use-toast";
@@ -14,6 +14,7 @@ const AdminPage = () => {
   const { isLoggedIn, password, login, logout } = useAdmin();
   const queryClient = useQueryClient();
   const [isFetching, setIsFetching] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   if (!isLoggedIn) {
     return <AdminLogin onLogin={login} />;
@@ -67,6 +68,38 @@ const AdminPage = () => {
     }
   };
 
+  const handleSearchContent = async () => {
+    setIsSearching(true);
+    try {
+      toast({ title: "🔍 מחפש חדשות AI באינטרנט..." });
+      const searchResult = await adminApi.searchContent(password);
+
+      // Refresh the suggestions list
+      queryClient.invalidateQueries({ queryKey: ["suggestions"] });
+
+      if (searchResult.fetched > 0) {
+        toast({
+          title: `✅ נמצאו ${searchResult.fetched} פריטים חדשים`,
+          description: searchResult.results?.slice(0, 3).join(" • ") || undefined,
+        });
+      } else {
+        toast({ title: "לא נמצא תוכן חדש בחיפוש" });
+      }
+
+      if (searchResult.errors?.length) {
+        console.warn("Search errors:", searchResult.errors);
+      }
+    } catch (err) {
+      toast({
+        title: "שגיאת חיפוש",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background" dir="rtl">
       <header className="border-b border-border">
@@ -74,8 +107,21 @@ const AdminPage = () => {
           <h1 className="text-lg font-bold">דשבורד ניהולי</h1>
           <div className="flex items-center gap-3">
             <Button
+              onClick={handleSearchContent}
+              disabled={isSearching || isFetching}
+              size="sm"
+              variant="outline"
+            >
+              {isSearching ? (
+                <Loader2 className="h-4 w-4 animate-spin ml-2" />
+              ) : (
+                <Search className="h-4 w-4 ml-2" />
+              )}
+              חפש חדשות AI
+            </Button>
+            <Button
               onClick={handleFetchAndProcess}
-              disabled={isFetching}
+              disabled={isFetching || isSearching}
               size="sm"
             >
               {isFetching ? (
