@@ -61,18 +61,32 @@ Deno.serve(async (req) => {
       }
 
       const title = updates?.title || suggestion.suggested_title || suggestion.original_title || "ללא כותרת";
+      const content = updates?.content || suggestion.suggested_content || "";
+      const excerpt = updates?.excerpt || suggestion.suggested_excerpt || "";
+
+      // Prevent publishing posts without content
+      if (!content || content.trim().length < 10) {
+        return new Response(
+          JSON.stringify({ error: "Cannot publish a post without content. Please process or edit the suggestion first." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const slug = generateSlug(title);
 
-      // Create published post
+      // Create published post - ensure source_url is preserved
+      const sourceUrl = suggestion.source_url || null;
+      console.log("Publishing post with source_url:", sourceUrl);
+
       const { error: insertError } = await supabase.from("published_posts").insert({
         suggestion_id: suggestion.id,
         slug,
         title,
-        excerpt: updates?.excerpt || suggestion.suggested_excerpt || "",
-        content: updates?.content || suggestion.suggested_content || "",
+        excerpt,
+        content,
         section: updates?.section || suggestion.suggested_section || "weekly",
         tag: updates?.tag || suggestion.suggested_tag || "",
-        source_url: suggestion.source_url || null,
+        source_url: sourceUrl,
         published: true,
       });
 
