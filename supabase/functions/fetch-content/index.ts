@@ -295,7 +295,42 @@ Deno.serve(async (req) => {
           console.log(`Found ${articleLinks.length} article links from ${source.name}, processing top ${topArticles.length}`);
 
           if (topArticles.length === 0) {
-            console.log(`No article links found for ${source.name}, skipping`);
+            console.log(`No article links found for ${source.name}, falling back to search`);
+            // Fallback: use Firecrawl search to find recent articles from this domain
+            try {
+              const domain = new URL(source.url).hostname;
+              const searchResponse = await fetch("https://api.firecrawl.dev/v1/search", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  query: `site:${domain} AI news announcement`,
+                  limit: 3,
+                  scrapeOptions: { formats: ["markdown"], onlyMainContent: true },
+                }),
+              });
+              const searchData = await searchResponse.json();
+              if (searchResponse.ok && searchData.success && searchData.data) {
+                for (const result of searchData.data) {
+                  if (!result.url) continue;
+                  const { data: existing } = await supabase.from("content_suggestions").select("id").eq("source_url", result.url).maybeSingle();
+                  if (existing) continue;
+                  const title = result.title || source.name;
+                  const content = result.markdown || result.description || "";
+                  if (content.length > 100) {
+                    const { error: insertError } = await supabase.from("content_suggestions").insert({
+                      source_id: source.id, source_url: result.url,
+                      original_title: title.substring(0, 500), original_content: content.substring(0, 10000), status: "pending",
+                    });
+                    if (!insertError) { fetchedCount++; console.log(`✅ Search fallback: ${title.substring(0, 60)}`); }
+                  }
+                }
+              }
+            } catch (searchErr) {
+              console.error(`Search fallback error for ${source.name}:`, searchErr);
+            }
             continue;
           }
 

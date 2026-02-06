@@ -14,6 +14,37 @@ const SECTION_DESCRIPTIONS = {
   viral: "ויראלי — מה הפך ויראלי בעולם ה-AI ולמה זה חשוב",
 };
 
+// Post-processing filter: reject AI-generated titles about finance/economics
+function isFinanceTitle(title: string): boolean {
+  if (!title) return false;
+  const patterns = [
+    /מיליארד\s*דולר/,
+    /מיליון\s*דולר/,
+    /\$\d+\s*(billion|million|B|M|bn|mn|מיליארד|מיליון)/i,
+    /\b(מניות|מניה|בורסה|שווי שוק|גיוס הון|גייסה|הכנסות|רווח|דוח כספי|רבעון)\b/,
+    /\b(stock|stocks|shares|nasdaq|revenue|earnings|valuation|ipo|market cap|quarterly)\b/i,
+    /\b(השקעה|השקעות|משקיעים)\b/,
+    /ירידות\s*במניות/,
+    /תוצאות\s*(חזקות|חלשות)\s*ברבעון/,
+  ];
+  return patterns.some(p => p.test(title));
+}
+
+// Detect homepage/index URLs that shouldn't be processed
+function isHomepageUrl(url: string): boolean {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    const path = u.pathname.replace(/\/$/, "");
+    if (!path || path === "") return true;
+    const segments = path.split("/").filter(Boolean);
+    if (segments.length <= 1) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -78,6 +109,21 @@ Deno.serve(async (req) => {
 
     for (const suggestion of suggestions) {
       try {
+        // Pre-check: reject homepage/index URLs before wasting AI calls
+        if (isHomepageUrl(suggestion.source_url || "")) {
+          console.log(`Rejecting homepage URL: ${suggestion.source_url}`);
+          await supabase
+            .from("content_suggestions")
+            .update({
+              status: "rejected",
+              suggested_title: "[נדחה אוטומטית] דף בית/אינדקס - לא מאמר",
+              reviewed_at: new Date().toISOString(),
+            })
+            .eq("id", suggestion.id);
+          processedCount++;
+          continue;
+        }
+
         const prompt = `אתה עורך תוכן מקצועי לאתר חדשות AI בעברית המיועד ל-power users ומפתחים.
 
 הסגנון שלך:
@@ -181,6 +227,22 @@ ${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n"
           } else {
             processedCount++;
           }
+          continue;
+        }
+
+        // Post-filter: reject if AI generated a finance/economics title
+        const suggestedTitle = parsed.title || "";
+        if (isFinanceTitle(suggestedTitle)) {
+          console.log(`AI post-filter rejected ${suggestion.id}: finance title "${suggestedTitle.substring(0, 60)}"`);
+          await supabase
+            .from("content_suggestions")
+            .update({
+              status: "rejected",
+              suggested_title: `[נדחה אוטומטית] כתבה כלכלית/פיננסית`,
+              reviewed_at: new Date().toISOString(),
+            })
+            .eq("id", suggestion.id);
+          processedCount++;
           continue;
         }
 
