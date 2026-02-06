@@ -20,6 +20,23 @@ export const adminApi = {
     return response.json();
   },
 
+  async searchContent(password: string) {
+    const response = await fetch(`${FUNCTIONS_URL}/search-content`, {
+      method: "POST",
+      headers: {
+        "x-admin-password": password,
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+      },
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || "Failed to search content");
+    }
+    return response.json();
+  },
+
   async processContent(password: string) {
     const response = await fetch(`${FUNCTIONS_URL}/process-content`, {
       method: "POST",
