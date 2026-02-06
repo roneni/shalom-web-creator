@@ -53,6 +53,23 @@ function isRecent(dateStr: string, days: number): boolean {
   }
 }
 
+// Pre-filter: reject finance/economics/stock articles by title keywords
+function isFinanceContent(title: string): boolean {
+  if (!title) return false;
+  const t = title.toLowerCase();
+  const patterns = [
+    /\b(stock|stocks|shares|nasdaq|s&p|dow jones|nyse|ipo|market cap)\b/i,
+    /\b(מניות|מניה|בורסה|נאסד"ק|תל אביב 35|מדד)\b/,
+    /\b(revenue|earnings|quarterly results|fiscal|valuation|投資)\b/i,
+    /\b(הכנסות|רווח|הפסד|דוח כספי|שווי שוק|תחזית כלכלית)\b/,
+    /\$\d+\s*(billion|million|B|M|bn|mn|מיליארד|מיליון)/i,
+    /\b(invest|investment|investor|funding round|raised \$|funding)\b/i,
+    /\b(השקעה|השקעות|משקיעים|גיוס הון|גייסה)\b/,
+    /\b(dividend|hedge fund|venture capital|private equity)\b/i,
+  ];
+  return patterns.some((p) => p.test(t));
+}
+
 // Check if a URL looks like an index/category page (not an article)
 function isIndexPage(url: string): boolean {
   try {
@@ -325,6 +342,12 @@ Deno.serve(async (req) => {
               console.log(`  Skipped generic title: "${title.substring(0, 60)}"`);
               continue;
             }
+            
+            // Skip finance/economics/stock articles
+            if (isFinanceContent(title)) {
+              console.log(`  Skipped finance content: "${title.substring(0, 60)}"`);
+              continue;
+            }
 
             const { error: insertError } = await supabase
               .from("content_suggestions")
@@ -404,6 +427,7 @@ Deno.serve(async (req) => {
           if (content.length < 200) continue;
           
           if (/^(AI News|Artificial Intelligence|Technology|Latest|Home|Blog)\s*[\|–—:]/i.test(title)) continue;
+          if (isFinanceContent(title)) continue;
 
           const { error: insertError } = await supabase
             .from("content_suggestions")
