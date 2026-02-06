@@ -148,97 +148,110 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
         </div>
       ) : (
         <div className="space-y-4">
-          {suggestions.map((suggestion: any) => (
-            <Card key={suggestion.id} className="overflow-hidden">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <CardTitle className="text-base leading-tight mb-2">
-                      {suggestion.suggested_title || suggestion.original_title || "ללא כותרת"}
-                    </CardTitle>
-                    <div className="flex flex-wrap gap-2">
-                      {suggestion.suggested_section && (
-                        <Badge variant="secondary" className="text-xs">
-                          {SECTION_LABELS[suggestion.suggested_section] || suggestion.suggested_section}
+          {suggestions.map((suggestion: any) => {
+            const isProcessed = !!suggestion.suggested_title && !!suggestion.suggested_content;
+
+            return (
+              <Card key={suggestion.id} className="overflow-hidden">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="text-base leading-tight mb-2">
+                        {suggestion.suggested_title || suggestion.original_title || "ללא כותרת"}
+                      </CardTitle>
+                      <div className="flex flex-wrap gap-2">
+                        {suggestion.suggested_section && (
+                          <Badge variant="secondary" className="text-xs">
+                            {SECTION_LABELS[suggestion.suggested_section] || suggestion.suggested_section}
+                          </Badge>
+                        )}
+                        {suggestion.suggested_tag && (
+                          <Badge variant="outline" className="text-xs">
+                            {suggestion.suggested_tag}
+                          </Badge>
+                        )}
+                        <Badge
+                          variant={
+                            suggestion.status === "approved"
+                              ? "default"
+                              : suggestion.status === "rejected"
+                              ? "destructive"
+                              : "secondary"
+                          }
+                          className="text-xs"
+                        >
+                          {STATUS_LABELS[suggestion.status]}
                         </Badge>
-                      )}
-                      {suggestion.suggested_tag && (
-                        <Badge variant="outline" className="text-xs">
-                          {suggestion.suggested_tag}
-                        </Badge>
-                      )}
-                      <Badge
-                        variant={
-                          suggestion.status === "approved"
-                            ? "default"
-                            : suggestion.status === "rejected"
-                            ? "destructive"
-                            : "secondary"
-                        }
-                        className="text-xs"
-                      >
-                        {STATUS_LABELS[suggestion.status]}
-                      </Badge>
+                        {suggestion.status === "pending" && !isProcessed && (
+                          <Badge variant="outline" className="text-xs border-yellow-500 text-yellow-500">
+                            ⏳ טרם עובד
+                          </Badge>
+                        )}
+                      </div>
                     </div>
+                    {suggestion.source_url && (
+                      <a
+                        href={suggestion.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-muted-foreground hover:text-primary shrink-0"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    )}
                   </div>
-                  {suggestion.source_url && (
-                    <a
-                      href={suggestion.source_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-muted-foreground hover:text-primary shrink-0"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                    </a>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {suggestion.suggested_excerpt && (
+                    <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+                      {suggestion.suggested_excerpt}
+                    </p>
                   )}
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                {suggestion.suggested_excerpt && (
-                  <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                    {suggestion.suggested_excerpt}
-                  </p>
-                )}
 
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">
-                    {(suggestion as any).sources?.name || "מקור לא ידוע"} •{" "}
-                    {new Date(suggestion.fetched_at).toLocaleDateString("he-IL")}
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">
+                      {(suggestion as any).sources?.name || "מקור לא ידוע"} •{" "}
+                      {new Date(suggestion.fetched_at).toLocaleDateString("he-IL")}
+                    </span>
 
-                  {suggestion.status === "pending" && (
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => openEdit(suggestion)}
-                        disabled={approveMutation.isPending || rejectMutation.isPending}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => rejectMutation.mutate(suggestion.id)}
-                        disabled={rejectMutation.isPending}
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => approveMutation.mutate({ id: suggestion.id })}
-                        disabled={approveMutation.isPending}
-                      >
-                        <Check className="h-3.5 w-3.5 mr-1" />
-                        אשר
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                    {suggestion.status === "pending" && (
+                      <div className="flex gap-2 items-center">
+                        {!isProcessed && (
+                          <span className="text-xs text-yellow-500 mr-2">יש להריץ עיבוד תוכן תחילה</span>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => openEdit(suggestion)}
+                          disabled={approveMutation.isPending || rejectMutation.isPending}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => rejectMutation.mutate(suggestion.id)}
+                          disabled={rejectMutation.isPending}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => approveMutation.mutate({ id: suggestion.id })}
+                          disabled={approveMutation.isPending || !isProcessed}
+                          title={!isProcessed ? "יש להריץ עיבוד תוכן לפני אישור" : ""}
+                        >
+                          <Check className="h-3.5 w-3.5 mr-1" />
+                          אשר
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
