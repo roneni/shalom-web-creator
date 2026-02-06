@@ -232,6 +232,19 @@ Deno.serve(async (req) => {
         try {
           console.log(`Fetching from: ${source.name} (${source.url})`);
 
+          // Check if we already have content from this URL (dedup for websites)
+          const { data: existingWebsite } = await supabase
+            .from("content_suggestions")
+            .select("id")
+            .eq("source_url", source.url)
+            .gte("fetched_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+            .maybeSingle();
+
+          if (existingWebsite) {
+            console.log(`Skipping ${source.name} — already fetched in last 24h`);
+            continue;
+          }
+
           const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
             method: "POST",
             headers: {
