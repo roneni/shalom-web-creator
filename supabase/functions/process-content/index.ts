@@ -62,11 +62,15 @@ Deno.serve(async (req) => {
     // Get active topics for context
     const { data: topics } = await supabase
       .from("topics")
-      .select("name, name_he")
+      .select("name, name_he, description")
       .eq("active", true);
 
-    const topicsContext = topics && topics.length > 0
-      ? `נושאים מועדפים: ${topics.map((t) => t.name_he || t.name).join(", ")}`
+    const topicsList = topics && topics.length > 0
+      ? topics.map((t) => `- ${t.name}: ${t.name_he}${t.description ? ` (${t.description})` : ""}`).join("\n")
+      : "";
+
+    const topicsContext = topicsList
+      ? `\nתחומי AI מוכרים לסיווג — השתמש בהם כדי לסנן רלוונטיות ולהצליב:\n${topicsList}\n\nכלל מיוחד לקטגוריית "למידה עמוקה" (deep_learning): רק חידוש אחד משמעותי בשבוע בתחום הזה, ורק אם מדובר בפיתוח עתידני (למשל התקדמות לכיוון AGI). דחה תוכן שגרתי בתחום ML.\n`
       : "";
 
     let processedCount = 0;
@@ -103,17 +107,19 @@ ${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n"
 תוכן: ${(suggestion.original_content || "").substring(0, 4000)}
 
 משימה:
-1. קודם כל, בדוק אם התוכן שיווקי/גנרי/ריק — אם כן, החזר {"reject": true, "reject_reason": "..."}
-2. אם התוכן רלוונטי ואיכותי:
+1. קודם כל, הצלב את התוכן עם רשימת התחומים למעלה. אם הוא לא נופל באף תחום — דחה עם reject_reason "לא רלוונטי לתחומי העניין"
+2. בדוק אם התוכן שיווקי/גנרי/ריק/ישן — אם כן, החזר {"reject": true, "reject_reason": "..."}
+3. אם התוכן רלוונטי ואיכותי:
    - כתוב כותרת בעברית (קצרה, ברורה, לא שיווקית, מתארת את הנושא הספציפי)
    - כתוב תקציר של 1-2 משפטים בעברית
    - כתוב תוכן מלא בעברית (3-5 פסקאות, תמציתי ומקצועי)
    - סווג למדור המתאים ביותר מהרשימה
    - הצע תגית קצרה (1-2 מילים)
+   - ציין את התחום הרלוונטי מהרשימה בשדה topic
 
 החזר את התשובה בפורמט JSON בלבד:
 אם נדחה: {"reject": true, "reject_reason": "סיבה קצרה"}
-אם מאושר: {"reject": false, "title": "...", "excerpt": "...", "content": "...", "section": "weekly|features|tools|viral", "tag": "..."}`;
+אם מאושר: {"reject": false, "title": "...", "excerpt": "...", "content": "...", "section": "weekly|features|tools|viral", "tag": "...", "topic": "שם_התחום"}`;
 
         const response = await fetch("https://api.perplexity.ai/chat/completions", {
           method: "POST",
