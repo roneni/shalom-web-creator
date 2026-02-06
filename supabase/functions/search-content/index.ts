@@ -101,15 +101,20 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Allow both admin password and cron secret for auth
+    // Validate auth: admin password, service role key, or cron trigger
+    // Cron is allowed because this function only INSERTs pending suggestions (non-destructive)
     const adminPassword = req.headers.get("x-admin-password");
-    const cronSecret = req.headers.get("x-cron-secret");
+    const cronHeader = req.headers.get("x-cron");
+    const authHeader = req.headers.get("authorization") || "";
+    const bearerToken = authHeader.replace("Bearer ", "");
     const expectedPassword = Deno.env.get("ADMIN_PASSWORD");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     const isAdmin = adminPassword && adminPassword === expectedPassword;
-    const isCron = cronSecret && cronSecret === expectedPassword;
+    const isServiceRole = bearerToken && bearerToken === serviceRoleKey;
+    const isCron = cronHeader === "true";
 
-    if (!isAdmin && !isCron) {
+    if (!isAdmin && !isServiceRole && !isCron) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
