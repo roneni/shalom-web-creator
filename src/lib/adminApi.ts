@@ -67,6 +67,12 @@ export const adminApi = {
       query = query.eq("suggested_section", section);
     }
 
+    // For pending items, only show those that have been processed by AI
+    if (status === "pending") {
+      query = query.not("suggested_title", "is", null);
+      query = query.not("suggested_content", "is", null);
+    }
+
     const { data, error } = await query.limit(50);
     if (error) throw error;
     return data;
