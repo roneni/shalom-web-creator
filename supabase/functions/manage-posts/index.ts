@@ -72,6 +72,7 @@ Deno.serve(async (req) => {
         content: updates?.content || suggestion.suggested_content || "",
         section: updates?.section || suggestion.suggested_section || "weekly",
         tag: updates?.tag || suggestion.suggested_tag || "",
+        source_url: suggestion.source_url || null,
         published: true,
       });
 

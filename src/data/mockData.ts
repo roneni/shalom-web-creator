@@ -8,6 +8,7 @@ export interface Post {
   section: SectionId;
   sectionName: string;
   tag: string;
+  sourceUrl?: string;
 }
 
 export type SectionId = "weekly" | "features" | "tools" | "viral";

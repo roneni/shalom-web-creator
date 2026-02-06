@@ -80,6 +80,7 @@ export type Database = {
           published: boolean
           section: string
           slug: string
+          source_url: string | null
           suggestion_id: string | null
           tag: string | null
           title: string
@@ -93,6 +94,7 @@ export type Database = {
           published?: boolean
           section: string
           slug: string
+          source_url?: string | null
           suggestion_id?: string | null
           tag?: string | null
           title: string
@@ -106,6 +108,7 @@ export type Database = {
           published?: boolean
           section?: string
           slug?: string
+          source_url?: string | null
           suggestion_id?: string | null
           tag?: string | null
           title?: string

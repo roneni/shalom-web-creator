@@ -1,5 +1,5 @@
 import { useParams, Link } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ExternalLink } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PostCard from "@/components/sections/PostCard";
@@ -89,6 +89,21 @@ const PostPage = () => {
               />
             ))}
           </div>
+
+          {/* Source Link */}
+          {post.sourceUrl && (
+            <div className="mt-8 p-4 rounded-lg bg-muted/50 border border-border">
+              <a
+                href={post.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+              >
+                <ExternalLink className="h-4 w-4" />
+                קראו את הכתבה המקורית
+              </a>
+            </div>
+          )}
 
           {/* Back to section */}
           <div className="mt-14 pt-8 border-t border-border">

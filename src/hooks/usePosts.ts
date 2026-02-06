@@ -20,6 +20,7 @@ function dbToPost(row: any): Post {
     section: row.section as SectionId,
     sectionName: section?.name || row.section,
     tag: row.tag || "",
+    sourceUrl: row.source_url || undefined,
   };
 }
 
