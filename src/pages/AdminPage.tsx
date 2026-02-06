@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RefreshCw, LogOut, Loader2 } from "lucide-react";
@@ -11,6 +12,7 @@ import SourcesManager from "@/components/admin/SourcesManager";
 
 const AdminPage = () => {
   const { isLoggedIn, password, login, logout } = useAdmin();
+  const queryClient = useQueryClient();
   const [isFetching, setIsFetching] = useState(false);
 
   if (!isLoggedIn) {
@@ -45,6 +47,9 @@ const AdminPage = () => {
         // If processed less than batch size (5), we're done
         hasMore = (processResult.processed || 0) >= 5;
       }
+
+      // Refresh the suggestions list
+      queryClient.invalidateQueries({ queryKey: ["suggestions"] });
 
       if (totalProcessed > 0) {
         toast({ title: `✅ עובדו ${totalProcessed} הצעות — מוכנות לאישור` });
