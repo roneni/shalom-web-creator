@@ -429,11 +429,13 @@ Deno.serve(async (req) => {
     }
 
     // === PART 4: Auto-trigger processing if we found new content ===
+    let approvedCount = 0;
+    let totalProcessed = 0;
+    
     if (fetchedCount > 0) {
       console.log(`Found ${fetchedCount} new items, triggering AI processing...`);
       try {
         const processUrl = `${supabaseUrl}/functions/v1/process-content`;
-        let totalProcessed = 0;
         let hasMore = true;
 
         while (hasMore) {
@@ -455,7 +457,17 @@ Deno.serve(async (req) => {
           }
         }
 
-        console.log(`AI processing complete: ${totalProcessed} items processed`);
+        // Count how many actually survived AI filtering (pending with content)
+        const { count } = await supabase
+          .from("content_suggestions")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "pending")
+          .not("suggested_title", "is", null)
+          .not("suggested_content", "is", null);
+        
+        approvedCount = count || 0;
+        
+        console.log(`AI processing complete: ${totalProcessed} processed, ${approvedCount} pending for review`);
       } catch (processErr) {
         console.error("Auto-process error:", processErr);
         errors.push(`Auto-process: ${processErr instanceof Error ? processErr.message : "Error"}`);
@@ -466,8 +478,10 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        message: `Active search found ${fetchedCount} new items`,
+        message: `Search found ${fetchedCount} items, ${approvedCount} approved for review`,
         fetched: fetchedCount,
+        processed: totalProcessed,
+        approved: approvedCount,
         results: searchResults,
         errors: errors.length > 0 ? errors : undefined,
       }),

@@ -78,9 +78,13 @@ const AdminPage = () => {
       queryClient.invalidateQueries({ queryKey: ["suggestions"] });
 
       if (searchResult.fetched > 0) {
+        const approved = searchResult.approved || 0;
+        const rejected = searchResult.fetched - approved;
         toast({
-          title: `✅ נמצאו ${searchResult.fetched} פריטים חדשים`,
-          description: searchResult.results?.slice(0, 3).join(" • ") || undefined,
+          title: `✅ נסרקו ${searchResult.fetched} פריטים`,
+          description: approved > 0 
+            ? `${approved} הצעות חדשות מחכות לסקירה${rejected > 0 ? ` • ${rejected} נדחו ע״י AI` : ""}`
+            : `כל ${searchResult.fetched} הפריטים נדחו ע״י AI (ישנים/שיווקיים/לא רלוונטיים)`,
         });
       } else {
         toast({ title: "לא נמצא תוכן חדש בחיפוש" });
