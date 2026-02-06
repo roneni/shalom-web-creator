@@ -9,9 +9,7 @@ const corsHeaders = {
 // Known RSS feed URLs for AI blogs
 const RSS_FEEDS: Record<string, string> = {
   "openai.com": "https://openai.com/blog/rss.xml",
-  "anthropic.com": "https://www.anthropic.com/rss.xml",
   "deepmind.google": "https://deepmind.google/blog/rss.xml",
-  "ai.meta.com": "https://ai.meta.com/blog/rss.xml",
   "blog.google": "https://blog.google/technology/ai/rss/",
   "huggingface.co": "https://huggingface.co/blog/feed.xml",
 };
@@ -55,39 +53,86 @@ function isRecent(dateStr: string, days: number): boolean {
   }
 }
 
-// Build search queries from topics
+// Check if a URL looks like an index/category page (not an article)
+function isIndexPage(url: string): boolean {
+  try {
+    const u = new URL(url);
+    const path = u.pathname.replace(/\/$/, "");
+    
+    // Root or single-segment category paths are likely index pages
+    if (!path || path === "") return true;
+    
+    const segments = path.split("/").filter(Boolean);
+    
+    // Single-segment paths like /ai or /technology are usually category pages
+    if (segments.length <= 1) return true;
+    
+    // Known category patterns
+    const categoryPatterns = [
+      /^\/category\//i,
+      /^\/topics?\//i,
+      /^\/tags?\//i,
+      /^\/news\/?$/i,
+      /^\/blog\/?$/i,
+      /^\/technology\/?$/i,
+      /^\/tech\/?$/i,
+      /^\/artificial-intelligence\/?$/i,
+      /\/ai\/?$/i,
+    ];
+    
+    if (categoryPatterns.some((p) => p.test(path))) return true;
+    
+    // URLs ending with common non-article patterns
+    if (path.endsWith("/about") || path.endsWith("/pricing") || 
+        path.endsWith("/contact") || path.endsWith("/careers") ||
+        path.endsWith("/products") || path.endsWith("/features")) return true;
+    
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+// Build search queries from topics — with date context for better results
 function buildSearchQueries(topics: Array<{ name: string; name_he: string; description: string | null }>): string[] {
+  const now = new Date();
+  const monthNames = ["January", "February", "March", "April", "May", "June", 
+    "July", "August", "September", "October", "November", "December"];
+  const currentMonth = monthNames[now.getMonth()];
+  const currentYear = now.getFullYear();
+  const dateContext = `${currentMonth} ${currentYear}`;
+  
   const queryMap: Record<string, string> = {
-    text_generation: "AI text generation new model release 2026",
-    image_generation: "AI image generation new tool update",
-    video_generation: "AI video generation new release",
-    audio_generation: "AI audio generation music speech new",
-    "3d_generation": "AI 3D generation model new",
-    chatbots: "AI chatbot virtual assistant new release",
-    translation: "AI translation breakthrough new model",
-    semantic_search: "AI search semantic new technology",
-    speech: "AI speech recognition text to speech new",
-    object_detection: "computer vision AI new model",
-    nocode_ai: "no-code AI platform new launch",
-    model_training: "AI model training fine-tuning new tool",
-    prompt_engineering: "prompt engineering AI new technique tool",
-    robotics: "AI robotics new robot launch",
-    rpa: "AI automation RPA workflow new",
-    data_analytics: "AI analytics prediction new tool",
-    business_ai: "AI business enterprise CRM new",
-    education_ai: "AI education learning new tool",
-    security_ai: "AI cybersecurity threat detection new",
-    gaming_ai: "AI gaming NPC new technology",
-    agi: "AGI artificial general intelligence breakthrough",
-    multimodal: "multimodal AI new model release",
-    ai_agents: "AI agents autonomous new release",
-    neurosymbolic: "neurosymbolic AI new research",
-    bci: "brain computer interface AI new",
-    cloud_ai: "cloud AI service new launch AWS Azure GCP",
-    edge_ai: "edge AI on-device model new",
-    open_source: "open source AI model new release",
-    finetuning_platforms: "AI fine-tuning platform new tool",
-    deep_learning: "deep learning breakthrough AGI frontier",
+    text_generation: `"text generation" OR "language model" new release announcement ${dateContext}`,
+    image_generation: `"AI image generation" OR "image model" new launch ${dateContext}`,
+    video_generation: `"AI video generation" OR "video model" new release ${dateContext}`,
+    audio_generation: `"AI audio" OR "AI music" OR "AI voice" new tool ${dateContext}`,
+    "3d_generation": `"AI 3D" OR "3D generation" model new ${dateContext}`,
+    chatbots: `"AI chatbot" OR "AI assistant" launch announcement ${dateContext}`,
+    translation: `"AI translation" OR "machine translation" new model ${dateContext}`,
+    semantic_search: `"AI search" OR "semantic search" new technology ${dateContext}`,
+    speech: `"speech recognition" OR "text to speech" AI new ${dateContext}`,
+    object_detection: `"computer vision" OR "object detection" AI breakthrough ${dateContext}`,
+    nocode_ai: `"no-code AI" OR "AI platform" new launch ${dateContext}`,
+    model_training: `"model training" OR "fine-tuning" AI tool ${dateContext}`,
+    prompt_engineering: `"prompt engineering" new technique ${dateContext}`,
+    robotics: `"AI robotics" OR "humanoid robot" new launch ${dateContext}`,
+    rpa: `"AI automation" OR "intelligent automation" new ${dateContext}`,
+    data_analytics: `"AI analytics" OR "predictive AI" new tool ${dateContext}`,
+    business_ai: `"enterprise AI" OR "AI for business" new ${dateContext}`,
+    education_ai: `"AI education" OR "AI tutoring" new ${dateContext}`,
+    security_ai: `"AI cybersecurity" OR "AI security" new tool ${dateContext}`,
+    gaming_ai: `"AI gaming" OR "game AI" new ${dateContext}`,
+    agi: `"AGI" OR "artificial general intelligence" breakthrough ${dateContext}`,
+    multimodal: `"multimodal AI" OR "multimodal model" new release ${dateContext}`,
+    ai_agents: `"AI agent" OR "autonomous agent" new release ${dateContext}`,
+    neurosymbolic: `"neurosymbolic AI" OR "symbolic AI" new research ${dateContext}`,
+    bci: `"brain computer interface" OR "neural interface" AI new ${dateContext}`,
+    cloud_ai: `"cloud AI" service new launch ${dateContext}`,
+    edge_ai: `"edge AI" OR "on-device AI" new ${dateContext}`,
+    open_source: `"open source AI" OR "open source model" new release ${dateContext}`,
+    finetuning_platforms: `"fine-tuning" OR "model customization" AI platform ${dateContext}`,
+    deep_learning: `"deep learning" breakthrough frontier ${dateContext}`,
   };
 
   return topics
@@ -102,7 +147,6 @@ Deno.serve(async (req) => {
 
   try {
     // Validate auth: admin password, service role key, or cron trigger
-    // Cron is allowed because this function only INSERTs pending suggestions (non-destructive)
     const adminPassword = req.headers.get("x-admin-password");
     const cronHeader = req.headers.get("x-cron");
     const authHeader = req.headers.get("authorization") || "";
@@ -137,6 +181,27 @@ Deno.serve(async (req) => {
     const errors: string[] = [];
     const searchResults: string[] = [];
 
+    // Collect all existing URLs once to avoid repeated DB lookups
+    const { data: existingUrls } = await supabase
+      .from("content_suggestions")
+      .select("source_url")
+      .not("source_url", "is", null);
+    
+    const urlSet = new Set((existingUrls || []).map((r: { source_url: string | null }) => r.source_url));
+    
+    const isNewUrl = (url: string): boolean => {
+      if (urlSet.has(url)) return false;
+      // Also check without trailing slash and with/without www
+      const normalized = url.replace(/\/$/, "");
+      if (urlSet.has(normalized) || urlSet.has(normalized + "/")) return false;
+      return true;
+    };
+    
+    const markUrlSeen = (url: string) => {
+      urlSet.add(url);
+      urlSet.add(url.replace(/\/$/, ""));
+    };
+
     // === PART 1: RSS Feeds ===
     console.log("=== Fetching RSS feeds ===");
     for (const [domain, feedUrl] of Object.entries(RSS_FEEDS)) {
@@ -153,19 +218,12 @@ Deno.serve(async (req) => {
 
         const xml = await rssResponse.text();
         const items = parseRSSItems(xml);
-        const recentItems = items.filter((item) => isRecent(item.pubDate, 7)).slice(0, 3);
+        const recentItems = items.filter((item) => isRecent(item.pubDate, 7)).slice(0, 5);
 
-        console.log(`RSS: ${domain} — ${items.length} total items, ${recentItems.length} recent`);
+        console.log(`RSS: ${domain} — ${items.length} total, ${recentItems.length} recent`);
 
         for (const item of recentItems) {
-          // Dedup by URL
-          const { data: existing } = await supabase
-            .from("content_suggestions")
-            .select("id")
-            .eq("source_url", item.link)
-            .maybeSingle();
-
-          if (existing) continue;
+          if (!isNewUrl(item.link)) continue;
 
           const content = item.description || item.title;
           if (content.length < 20) continue;
@@ -181,6 +239,7 @@ Deno.serve(async (req) => {
 
           if (!insertError) {
             fetchedCount++;
+            markUrlSeen(item.link);
             searchResults.push(`RSS [${domain}]: ${item.title.substring(0, 60)}`);
           }
         }
@@ -193,7 +252,6 @@ Deno.serve(async (req) => {
     // === PART 2: Active Topic Search via Firecrawl ===
     console.log("=== Active topic search ===");
 
-    // Get active topics
     const { data: topics } = await supabase
       .from("topics")
       .select("name, name_he, description")
@@ -208,7 +266,7 @@ Deno.serve(async (req) => {
 
       for (const query of selectedQueries) {
         try {
-          console.log(`Search: "${query}"`);
+          console.log(`Search: "${query.substring(0, 80)}..."`);
           const searchResponse = await fetch("https://api.firecrawl.dev/v1/search", {
             method: "POST",
             headers: {
@@ -216,7 +274,7 @@ Deno.serve(async (req) => {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              query: query,
+              query,
               limit: 5,
               scrapeOptions: {
                 formats: ["markdown"],
@@ -227,14 +285,14 @@ Deno.serve(async (req) => {
 
           const searchData = await searchResponse.json();
           if (!searchResponse.ok || !searchData.success) {
-            console.error(`Search error for "${query}":`, searchData);
-            errors.push(`Search "${query.substring(0, 30)}": ${searchData.error || "Failed"}`);
+            console.error(`Search failed for query:`, searchData);
+            errors.push(`Search: ${searchData.error || "Failed"}`);
             continue;
           }
 
           const results = searchData.data || [];
-          console.log(`Search: "${query}" returned ${results.length} results`);
-
+          let accepted = 0;
+          
           for (const result of results) {
             const url = result.url;
             if (!url) continue;
@@ -242,23 +300,31 @@ Deno.serve(async (req) => {
             // Skip social media, forums, non-article pages
             if (url.includes("reddit.com") || url.includes("twitter.com") ||
                 url.includes("x.com") || url.includes("youtube.com") ||
-                url.includes("linkedin.com") || url.includes("facebook.com")) {
+                url.includes("linkedin.com") || url.includes("facebook.com") ||
+                url.includes("wikipedia.org")) {
               continue;
             }
 
-            // Dedup by URL
-            const { data: existing } = await supabase
-              .from("content_suggestions")
-              .select("id")
-              .eq("source_url", url)
-              .maybeSingle();
+            // Skip index/category pages
+            if (isIndexPage(url)) {
+              console.log(`  Skipped index page: ${url}`);
+              continue;
+            }
 
-            if (existing) continue;
+            // Dedup
+            if (!isNewUrl(url)) continue;
 
             const title = result.title || result.metadata?.title || "";
             const content = result.markdown || result.description || "";
 
-            if (content.length < 100) continue;
+            // Require meaningful content
+            if (content.length < 200) continue;
+            
+            // Skip pages with titles that look like category/index pages
+            if (/^(AI News|Artificial Intelligence|Technology|Latest|Home|Blog)\s*[\|–—:]/i.test(title)) {
+              console.log(`  Skipped generic title: "${title.substring(0, 60)}"`);
+              continue;
+            }
 
             const { error: insertError } = await supabase
               .from("content_suggestions")
@@ -271,31 +337,39 @@ Deno.serve(async (req) => {
 
             if (!insertError) {
               fetchedCount++;
+              accepted++;
+              markUrlSeen(url);
               searchResults.push(`Search: ${title.substring(0, 60)}`);
             }
           }
+          
+          console.log(`  → ${results.length} results, ${accepted} accepted`);
 
           // Small delay between searches
           await new Promise((r) => setTimeout(r, 500));
         } catch (err) {
-          console.error(`Search error for "${query}":`, err);
-          errors.push(`Search "${query.substring(0, 30)}": ${err instanceof Error ? err.message : "Error"}`);
+          console.error(`Search error:`, err);
+          errors.push(`Search: ${err instanceof Error ? err.message : "Error"}`);
         }
       }
     }
 
-    // === PART 3: General AI news search ===
+    // === PART 3: General AI news search (targeted at recent articles) ===
     console.log("=== General AI news search ===");
+    const now = new Date();
+    const monthNames = ["January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"];
+    const dateStr = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+    
     const generalQueries = [
-      "artificial intelligence news today breaking",
-      "AI product launch announcement this week",
-      "new AI model release 2026",
+      `"AI" site:techcrunch.com OR site:theverge.com OR site:arstechnica.com ${dateStr}`,
+      `"artificial intelligence" announcement launch site:venturebeat.com OR site:wired.com ${dateStr}`,
+      `"AI model" OR "AI tool" release announcement this week ${dateStr}`,
     ];
-    // Pick one random general query per run
     const generalQuery = generalQueries[Math.floor(Math.random() * generalQueries.length)];
 
     try {
-      console.log(`General search: "${generalQuery}"`);
+      console.log(`General search: "${generalQuery.substring(0, 80)}..."`);
       const generalResponse = await fetch("https://api.firecrawl.dev/v1/search", {
         method: "POST",
         headers: {
@@ -315,25 +389,21 @@ Deno.serve(async (req) => {
       const generalData = await generalResponse.json();
       if (generalResponse.ok && generalData.success) {
         const results = generalData.data || [];
-        console.log(`General search returned ${results.length} results`);
+        let accepted = 0;
 
         for (const result of results) {
           const url = result.url;
           if (!url) continue;
           if (url.includes("reddit.com") || url.includes("twitter.com") ||
               url.includes("x.com") || url.includes("youtube.com")) continue;
-
-          const { data: existing } = await supabase
-            .from("content_suggestions")
-            .select("id")
-            .eq("source_url", url)
-            .maybeSingle();
-
-          if (existing) continue;
+          if (isIndexPage(url)) continue;
+          if (!isNewUrl(url)) continue;
 
           const title = result.title || result.metadata?.title || "";
           const content = result.markdown || result.description || "";
-          if (content.length < 100) continue;
+          if (content.length < 200) continue;
+          
+          if (/^(AI News|Artificial Intelligence|Technology|Latest|Home|Blog)\s*[\|–—:]/i.test(title)) continue;
 
           const { error: insertError } = await supabase
             .from("content_suggestions")
@@ -346,9 +416,12 @@ Deno.serve(async (req) => {
 
           if (!insertError) {
             fetchedCount++;
+            accepted++;
+            markUrlSeen(url);
             searchResults.push(`General: ${title.substring(0, 60)}`);
           }
         }
+        console.log(`General search: ${results.length} results, ${accepted} accepted`);
       }
     } catch (err) {
       console.error("General search error:", err);
@@ -387,6 +460,8 @@ Deno.serve(async (req) => {
         console.error("Auto-process error:", processErr);
         errors.push(`Auto-process: ${processErr instanceof Error ? processErr.message : "Error"}`);
       }
+    } else {
+      console.log("No new items found this run");
     }
 
     return new Response(
