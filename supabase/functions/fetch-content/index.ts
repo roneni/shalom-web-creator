@@ -232,20 +232,8 @@ Deno.serve(async (req) => {
         try {
           console.log(`Fetching from: ${source.name} (${source.url})`);
 
-          // Check if we already have content from this URL (dedup for websites)
-          const { data: existingWebsite } = await supabase
-            .from("content_suggestions")
-            .select("id")
-            .eq("source_url", source.url)
-            .gte("fetched_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-            .maybeSingle();
-
-          if (existingWebsite) {
-            console.log(`Skipping ${source.name} — already fetched in last 24h`);
-            continue;
-          }
-
-          const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
+          // Step 1: Scrape the blog/news index page to find article links
+          const indexResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
             method: "POST",
             headers: {
               Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
@@ -253,38 +241,114 @@ Deno.serve(async (req) => {
             },
             body: JSON.stringify({
               url: source.url,
-              formats: ["markdown"],
+              formats: ["links"],
               onlyMainContent: true,
             }),
           });
 
-          const data = await response.json();
-          if (!response.ok || !data.success) {
-            console.error(`Firecrawl error for ${source.url}:`, data);
-            errors.push(`${source.name}: ${data.error || "Scrape failed"}`);
+          const indexData = await indexResponse.json();
+          if (!indexResponse.ok || !indexData.success) {
+            console.error(`Firecrawl index error for ${source.url}:`, indexData);
+            errors.push(`${source.name}: ${indexData.error || "Index scrape failed"}`);
             continue;
           }
 
-          const scrapedContent = data.data || data;
-          const title = scrapedContent.metadata?.title || source.name;
-          const content = scrapedContent.markdown || "";
+          // Step 2: Extract article links from the page
+          const allLinks: string[] = indexData.data?.links || [];
+          const baseUrl = new URL(source.url);
+          const baseDomain = baseUrl.hostname;
 
-          if (content.length > 50) {
-            const { error: insertError } = await supabase
+          // Filter for article-like links (same domain, path looks like a blog post)
+          const articleLinks = allLinks.filter((link: string) => {
+            try {
+              const u = new URL(link);
+              // Must be same domain
+              if (u.hostname !== baseDomain && !u.hostname.endsWith(`.${baseDomain}`)) return false;
+              // Skip obvious non-article patterns
+              const path = u.pathname.toLowerCase();
+              if (path === "/" || path === source.url.replace(`https://${baseDomain}`, "")) return false;
+              if (path.includes("/careers") || path.includes("/pricing") || path.includes("/about") ||
+                  path.includes("/contact") || path.includes("/login") || path.includes("/signup") ||
+                  path.includes("/terms") || path.includes("/privacy") || path.includes("/legal") ||
+                  path.includes("/docs/") || path.includes("/api/")) return false;
+              // Should have enough path depth (not just /blog but /blog/article-name)
+              const segments = path.split("/").filter(Boolean);
+              if (segments.length < 2) return false;
+              return true;
+            } catch {
+              return false;
+            }
+          });
+
+          // Take only the first 3 most recent articles (they appear first on blog pages)
+          const topArticles = articleLinks.slice(0, 3);
+          console.log(`Found ${articleLinks.length} article links from ${source.name}, processing top ${topArticles.length}`);
+
+          if (topArticles.length === 0) {
+            console.log(`No article links found for ${source.name}, skipping`);
+            continue;
+          }
+
+          // Step 3: Check which articles we already have and scrape new ones
+          for (const articleUrl of topArticles) {
+            // Dedup check for this specific article URL
+            const { data: existingArticle } = await supabase
               .from("content_suggestions")
-              .insert({
-                source_id: source.id,
-                source_url: source.url,
-                original_title: title.substring(0, 500),
-                original_content: content.substring(0, 10000),
-                status: "pending",
+              .select("id")
+              .eq("source_url", articleUrl)
+              .maybeSingle();
+
+            if (existingArticle) {
+              console.log(`Skipping already fetched: ${articleUrl}`);
+              continue;
+            }
+
+            // Scrape the individual article
+            try {
+              const articleResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  url: articleUrl,
+                  formats: ["markdown"],
+                  onlyMainContent: true,
+                }),
               });
 
-            if (insertError) {
-              console.error(`Insert error for ${source.name}:`, insertError);
-              errors.push(`${source.name}: DB insert failed`);
-            } else {
-              fetchedCount++;
+              const articleData = await articleResponse.json();
+              if (!articleResponse.ok || !articleData.success) {
+                console.error(`Firecrawl article error for ${articleUrl}:`, articleData);
+                continue;
+              }
+
+              const scrapedContent = articleData.data || articleData;
+              const title = scrapedContent.metadata?.title || source.name;
+              const content = scrapedContent.markdown || "";
+
+              if (content.length > 100) {
+                const { error: insertError } = await supabase
+                  .from("content_suggestions")
+                  .insert({
+                    source_id: source.id,
+                    source_url: articleUrl,
+                    original_title: title.substring(0, 500),
+                    original_content: content.substring(0, 10000),
+                    status: "pending",
+                  });
+
+                if (insertError) {
+                  console.error(`Insert error for ${articleUrl}:`, insertError);
+                  errors.push(`${source.name}: DB insert failed for ${articleUrl}`);
+                } else {
+                  fetchedCount++;
+                  console.log(`✅ Fetched article: ${title.substring(0, 60)}`);
+                }
+              }
+            } catch (articleErr) {
+              console.error(`Error scraping article ${articleUrl}:`, articleErr);
             }
           }
         } catch (err) {
