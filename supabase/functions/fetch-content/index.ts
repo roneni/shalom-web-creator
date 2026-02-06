@@ -6,6 +6,86 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-admin-password, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Extract Twitter username from URL like https://x.com/OpenAI
+function extractTwitterUsername(url: string): string | null {
+  const match = url.match(/(?:x\.com|twitter\.com)\/(@?(\w+))/i);
+  return match ? match[2] : null;
+}
+
+// Fetch tweets from Twitter API v2 using search/recent
+async function fetchTweetsForUsers(
+  usernames: string[],
+  bearerToken: string
+): Promise<Array<{ username: string; text: string; id: string; created_at: string; url: string }>> {
+  const tweets: Array<{ username: string; text: string; id: string; created_at: string; url: string }> = [];
+
+  // Build query in batches (max query length ~512 chars for free tier)
+  // Each "from:username" is ~20 chars, so ~20 users per batch
+  const batchSize = 15;
+  for (let i = 0; i < usernames.length; i += batchSize) {
+    const batch = usernames.slice(i, i + batchSize);
+    const query = batch.map((u) => `from:${u}`).join(" OR ");
+
+    console.log(`Fetching tweets with query: ${query}`);
+
+    const params = new URLSearchParams({
+      query,
+      max_results: "20",
+      "tweet.fields": "created_at,author_id,text",
+      expansions: "author_id",
+      "user.fields": "username",
+    });
+
+    const response = await fetch(
+      `https://api.x.com/2/tweets/search/recent?${params.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${bearerToken}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error(`Twitter API error (${response.status}):`, errText);
+      continue;
+    }
+
+    const data = await response.json();
+
+    if (!data.data || data.data.length === 0) {
+      console.log("No tweets found for batch");
+      continue;
+    }
+
+    // Build author_id -> username map
+    const userMap: Record<string, string> = {};
+    if (data.includes?.users) {
+      for (const user of data.includes.users) {
+        userMap[user.id] = user.username;
+      }
+    }
+
+    for (const tweet of data.data) {
+      const username = userMap[tweet.author_id] || "unknown";
+      tweets.push({
+        username,
+        text: tweet.text,
+        id: tweet.id,
+        created_at: tweet.created_at,
+        url: `https://x.com/${username}/status/${tweet.id}`,
+      });
+    }
+
+    // Small delay between batches to respect rate limits
+    if (i + batchSize < usernames.length) {
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+
+  return tweets;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -23,12 +103,7 @@ Deno.serve(async (req) => {
     }
 
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
-    if (!FIRECRAWL_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "Firecrawl not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const TWITTER_BEARER_TOKEN = Deno.env.get("TWITTER_BEARER_TOKEN");
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -51,65 +126,95 @@ Deno.serve(async (req) => {
     let fetchedCount = 0;
     const errors: string[] = [];
 
-    for (const source of sources) {
+    // Separate Twitter and website sources
+    const twitterSources = sources.filter((s) => s.type === "twitter");
+    const websiteSources = sources.filter((s) => s.type !== "twitter");
+
+    // --- Handle Twitter sources via API ---
+    if (twitterSources.length > 0 && TWITTER_BEARER_TOKEN) {
       try {
-        console.log(`Fetching from: ${source.name} (${source.url})`);
+        const usernames = twitterSources
+          .map((s) => extractTwitterUsername(s.url))
+          .filter(Boolean) as string[];
 
-        let scrapedContent: any = null;
+        console.log(`Fetching tweets for ${usernames.length} users: ${usernames.join(", ")}`);
 
-        if (source.type === "twitter") {
-          // For Twitter/X, scrape the profile page
-          const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              url: source.url,
-              formats: ["markdown"],
-              onlyMainContent: true,
-            }),
+        const tweets = await fetchTweetsForUsers(usernames, TWITTER_BEARER_TOKEN);
+        console.log(`Got ${tweets.length} tweets`);
+
+        for (const tweet of tweets) {
+          // Find the matching source
+          const source = twitterSources.find((s) => {
+            const u = extractTwitterUsername(s.url);
+            return u?.toLowerCase() === tweet.username.toLowerCase();
           });
 
-          const data = await response.json();
-          if (response.ok && data.success) {
-            scrapedContent = data.data || data;
-          } else {
-            console.error(`Firecrawl error for ${source.url}:`, data);
-            errors.push(`${source.name}: ${data.error || "Scrape failed"}`);
-            continue;
-          }
-        } else {
-          // For websites, scrape main content
-          const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              url: source.url,
-              formats: ["markdown"],
-              onlyMainContent: true,
-            }),
-          });
+          if (!source) continue;
 
-          const data = await response.json();
-          if (response.ok && data.success) {
-            scrapedContent = data.data || data;
+          // Check if we already have this tweet (by source_url)
+          const { data: existing } = await supabase
+            .from("content_suggestions")
+            .select("id")
+            .eq("source_url", tweet.url)
+            .maybeSingle();
+
+          if (existing) continue; // Skip duplicates
+
+          const { error: insertError } = await supabase
+            .from("content_suggestions")
+            .insert({
+              source_id: source.id,
+              source_url: tweet.url,
+              original_title: `@${tweet.username} — ${tweet.created_at.substring(0, 10)}`,
+              original_content: tweet.text,
+              status: "pending",
+            });
+
+          if (insertError) {
+            console.error(`Insert error for tweet ${tweet.id}:`, insertError);
+            errors.push(`Tweet ${tweet.id}: DB insert failed`);
           } else {
-            console.error(`Firecrawl error for ${source.url}:`, data);
-            errors.push(`${source.name}: ${data.error || "Scrape failed"}`);
-            continue;
+            fetchedCount++;
           }
         }
+      } catch (err) {
+        console.error("Twitter fetch error:", err);
+        errors.push(`Twitter: ${err instanceof Error ? err.message : "Unknown error"}`);
+      }
+    } else if (twitterSources.length > 0 && !TWITTER_BEARER_TOKEN) {
+      errors.push("Twitter: TWITTER_BEARER_TOKEN not configured, skipping Twitter sources");
+    }
 
-        if (scrapedContent) {
+    // --- Handle website sources via Firecrawl ---
+    if (websiteSources.length > 0 && FIRECRAWL_API_KEY) {
+      for (const source of websiteSources) {
+        try {
+          console.log(`Fetching from: ${source.name} (${source.url})`);
+
+          const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              url: source.url,
+              formats: ["markdown"],
+              onlyMainContent: true,
+            }),
+          });
+
+          const data = await response.json();
+          if (!response.ok || !data.success) {
+            console.error(`Firecrawl error for ${source.url}:`, data);
+            errors.push(`${source.name}: ${data.error || "Scrape failed"}`);
+            continue;
+          }
+
+          const scrapedContent = data.data || data;
           const title = scrapedContent.metadata?.title || source.name;
           const content = scrapedContent.markdown || "";
 
-          // Only save if there's meaningful content
           if (content.length > 50) {
             const { error: insertError } = await supabase
               .from("content_suggestions")
@@ -128,11 +233,13 @@ Deno.serve(async (req) => {
               fetchedCount++;
             }
           }
+        } catch (err) {
+          console.error(`Error processing ${source.name}:`, err);
+          errors.push(`${source.name}: ${err instanceof Error ? err.message : "Unknown error"}`);
         }
-      } catch (err) {
-        console.error(`Error processing ${source.name}:`, err);
-        errors.push(`${source.name}: ${err instanceof Error ? err.message : "Unknown error"}`);
       }
+    } else if (websiteSources.length > 0 && !FIRECRAWL_API_KEY) {
+      errors.push("Firecrawl: FIRECRAWL_API_KEY not configured, skipping website sources");
     }
 
     return new Response(
@@ -140,6 +247,8 @@ Deno.serve(async (req) => {
         message: `Fetched content from ${fetchedCount} sources`,
         fetched: fetchedCount,
         total: sources.length,
+        twitterFetched: twitterSources.length,
+        websiteFetched: websiteSources.length,
         errors: errors.length > 0 ? errors : undefined,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
