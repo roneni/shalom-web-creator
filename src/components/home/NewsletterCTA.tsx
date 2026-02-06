@@ -17,10 +17,10 @@ const NewsletterCTA = () => {
             <Mail className="h-6 w-6 text-primary-foreground" />
           </div>
           <h2 className="text-2xl md:text-3xl font-bold mb-3">
-            לא מפספסים <span className="gradient-text">כלום</span>
+            ניוזלטר
           </h2>
           <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-            הירשמו לניוזלטר וקבלו את העדכונים החשובים ישירות למייל — בקרוב.
+            עדכונים ישירות למייל — בקרוב.
           </p>
           <Link to="/newsletter">
             <Button size="lg" className="gradient-bg hover:opacity-90 transition-opacity px-8 glow-sm">

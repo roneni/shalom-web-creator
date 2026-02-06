@@ -6,7 +6,7 @@ const SectionCards = () => {
   return (
     <section className="container mx-auto px-4 py-20">
       <h2 className="text-2xl md:text-3xl font-bold text-center mb-12">
-        ארבעה מדורים, <span className="gradient-text">אפס רעש</span>
+        המדורים
       </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
