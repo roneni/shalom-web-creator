@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ExternalLink } from "lucide-react";
 import type { Post } from "@/data/mockData";
 
 interface PostCardProps {
@@ -22,9 +22,23 @@ const PostCard = ({ post }: PostCardProps) => {
         <p className="text-sm text-muted-foreground leading-relaxed mb-4">
           {post.excerpt}
         </p>
-        <div className="flex items-center gap-1.5 text-sm font-medium text-primary">
-          <span>קראו עוד</span>
-          <ArrowLeft className="h-3.5 w-3.5 group-hover:-translate-x-1 transition-transform" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-sm font-medium text-primary">
+            <span>קראו עוד</span>
+            <ArrowLeft className="h-3.5 w-3.5 group-hover:-translate-x-1 transition-transform" />
+          </div>
+          {post.sourceUrl && (
+            <a
+              href={post.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink className="h-3 w-3" />
+              מקור
+            </a>
+          )}
         </div>
       </article>
     </Link>
