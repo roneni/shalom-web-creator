@@ -42,24 +42,42 @@ const STATUS_LABELS: Record<string, string> = {
 
 /** Build a meaningful display title from suggestion data */
 function getDisplayTitle(suggestion: any): string {
-  // Best case: AI-generated title
-  if (suggestion.suggested_title) return suggestion.suggested_title;
+  // Best case: AI-generated title (skip auto-reject markers)
+  if (suggestion.suggested_title && !suggestion.suggested_title.startsWith("[נדחה")) {
+    return suggestion.suggested_title;
+  }
 
-  // For tweets: show first ~80 chars of tweet text
-  if (suggestion.source_url?.includes("x.com/") && suggestion.original_content) {
-    const text = suggestion.original_content.substring(0, 100).replace(/https?:\/\/\S+/g, "").trim();
-    return text.length > 80 ? text.substring(0, 80) + "…" : text || suggestion.original_title || "ללא כותרת";
+  // For tweets: always prefer tweet text over handle-only title
+  if (suggestion.original_content) {
+    const isTweet = suggestion.source_url?.includes("x.com/") || suggestion.source_url?.includes("twitter.com/");
+    if (isTweet) {
+      const text = suggestion.original_content
+        .replace(/https?:\/\/\S+/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (text.length > 5) {
+        return text.length > 100 ? text.substring(0, 100) + "…" : text;
+      }
+    }
   }
 
   // For websites with content: extract first meaningful line
   if (suggestion.original_content && suggestion.original_title) {
     const title = suggestion.original_title;
-    // If it looks like a generic site name (short, no spaces, or just brand)
-    if (title.length < 30 && !title.includes(" — ") && !title.includes(":")) {
-      // Try to extract a headline from content
+    // If it looks like a generic site name or just a handle pattern (@name — date)
+    const isGeneric = title.length < 40 && (
+      /^@\w+\s*[—–-]/.test(title) ||
+      (!title.includes(" ") || title.split(" ").length <= 3)
+    );
+    if (isGeneric) {
       const lines = suggestion.original_content.split("\n").filter((l: string) => l.trim().length > 10);
       const headline = lines.find((l: string) => l.startsWith("#"));
       if (headline) return headline.replace(/^#+\s*/, "").substring(0, 100);
+      // Fallback: first meaningful line of content
+      if (lines.length > 0) {
+        const first = lines[0].trim();
+        return first.length > 100 ? first.substring(0, 100) + "…" : first;
+      }
     }
     return title;
   }

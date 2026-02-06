@@ -12,6 +12,41 @@ function extractTwitterUsername(url: string): string | null {
   return match ? match[2] : null;
 }
 
+// Pre-filter obvious promotional/spam tweets before sending to AI
+const SPAM_PATTERNS = [
+  /\$\d[\d,]*\+?\s*(IN|OFF|FOR)/i,           // "$55,000+ IN", "$59/MO"
+  /\b(GET|GRAB|CLAIM)\s+(YOUR|THIS|IT)\b/i,   // "Get your", "Grab this"
+  /\b\d+H?\s*LEFT\b/i,                        // "16H LEFT", "24H LEFT"
+  /LIMITED\s+(TIME|OFFER|SPOT)/i,              // "Limited time"
+  /\bFREE\s+(ACCESS|TRIAL|DOWNLOAD)\b/i,      // "Free access"
+  /🚀.*\$\d/,                                  // Emoji + price pattern
+  /\bDISCOUNT\b.*\b\d+%/i,                    // "Discount 50%"
+  /\b(HURRY|ACT\s+NOW|DON'T\s+MISS)\b/i,     // Urgency language
+  /\b(SIGN\s+UP|SUBSCRIBE|JOIN)\s+(NOW|TODAY|HERE)\b/i, // CTA
+  /\/mo\b.*\btools?\b/i,                       // "$X/mo tools"
+];
+
+function isPromotionalContent(text: string): boolean {
+  const matchCount = SPAM_PATTERNS.filter(p => p.test(text)).length;
+  // If 2+ patterns match, it's very likely promotional
+  return matchCount >= 2;
+}
+
+// Build a meaningful title from tweet text (not just @handle — date)
+function buildTweetTitle(username: string, text: string): string {
+  // Remove URLs and @mentions for a cleaner title
+  const cleaned = text
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/@\w+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (cleaned.length > 5) {
+    const title = cleaned.length > 100 ? cleaned.substring(0, 100) + "…" : cleaned;
+    return `@${username}: ${title}`;
+  }
+  return `@${username} — ציוץ`;
+}
+
 // Fetch tweets from Twitter API v2 using search/recent
 async function fetchTweetsForUsers(
   usernames: string[],
@@ -151,6 +186,12 @@ Deno.serve(async (req) => {
 
           if (!source) continue;
 
+          // Pre-filter: skip obvious promotional/spam tweets
+          if (isPromotionalContent(tweet.text)) {
+            console.log(`Skipping promotional tweet from @${tweet.username}: ${tweet.text.substring(0, 60)}...`);
+            continue;
+          }
+
           // Check if we already have this tweet (by source_url)
           const { data: existing } = await supabase
             .from("content_suggestions")
@@ -165,7 +206,7 @@ Deno.serve(async (req) => {
             .insert({
               source_id: source.id,
               source_url: tweet.url,
-              original_title: `@${tweet.username} — ${tweet.created_at.substring(0, 10)}`,
+              original_title: buildTweetTitle(tweet.username, tweet.text),
               original_content: tweet.text,
               status: "pending",
             });
