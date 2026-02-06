@@ -154,7 +154,7 @@ const AdminPage = () => {
           </TabsContent>
 
           <TabsContent value="sources">
-            <SourcesManager />
+            <SourcesManager password={password} />
           </TabsContent>
         </Tabs>
       </main>

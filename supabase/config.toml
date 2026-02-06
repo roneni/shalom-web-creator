@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.manage-posts]
 verify_jwt = false
+
+[functions.manage-sources]
+verify_jwt = false
+
+[functions.search-content]
+verify_jwt = false

@@ -219,8 +219,8 @@ Deno.serve(async (req) => {
       urlSet.add(url.replace(/\/$/, ""));
     };
 
-    // === PART 1: RSS Feeds ===
-    console.log("=== Fetching RSS feeds ===");
+    // === PART 1: Static RSS Feeds (blogs) ===
+    console.log("=== Fetching static RSS feeds ===");
     for (const [domain, feedUrl] of Object.entries(RSS_FEEDS)) {
       try {
         console.log(`RSS: Fetching ${domain}`);
@@ -263,6 +263,81 @@ Deno.serve(async (req) => {
       } catch (err) {
         console.error(`RSS error for ${domain}:`, err);
         errors.push(`RSS ${domain}: ${err instanceof Error ? err.message : "Error"}`);
+      }
+    }
+
+    // === PART 1.5: Google Alerts RSS Feeds from DB ===
+    console.log("=== Fetching Google Alerts RSS feeds ===");
+    const { data: rssSources } = await supabase
+      .from("sources")
+      .select("id, name, url")
+      .eq("type", "google_alerts_rss")
+      .eq("active", true);
+
+    if (rssSources && rssSources.length > 0) {
+      for (const source of rssSources) {
+        try {
+          console.log(`Google Alert: Fetching "${source.name}"`);
+          const rssResponse = await fetch(source.url, {
+            headers: { "User-Agent": "Mozilla/5.0 AI News Bot" },
+          });
+
+          if (!rssResponse.ok) {
+            console.log(`Google Alert: ${source.name} returned ${rssResponse.status}, skipping`);
+            continue;
+          }
+
+          const xml = await rssResponse.text();
+          const items = parseRSSItems(xml);
+          // Google Alerts Atom feeds use <updated> — take last 7 days
+          const recentItems = items.filter((item) => isRecent(item.pubDate, 7)).slice(0, 10);
+
+          console.log(`Google Alert: ${source.name} — ${items.length} total, ${recentItems.length} recent`);
+
+          let accepted = 0;
+          for (const item of recentItems) {
+            // Google Alerts links are redirect URLs — extract the real URL
+            let articleUrl = item.link;
+            try {
+              const u = new URL(articleUrl);
+              const realUrl = u.searchParams.get("url");
+              if (realUrl) articleUrl = realUrl;
+            } catch { /* keep original */ }
+
+            if (!isNewUrl(articleUrl)) continue;
+            if (isIndexPage(articleUrl)) continue;
+            if (isFinanceContent(item.title)) {
+              console.log(`  Skipped finance: "${item.title.substring(0, 60)}"`);
+              continue;
+            }
+
+            // Clean HTML from Google Alerts descriptions
+            const cleanDesc = (item.description || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+            const content = cleanDesc || item.title;
+            if (content.length < 20) continue;
+
+            const { error: insertError } = await supabase
+              .from("content_suggestions")
+              .insert({
+                source_id: source.id,
+                source_url: articleUrl,
+                original_title: item.title.replace(/<[^>]+>/g, "").substring(0, 500),
+                original_content: content.substring(0, 10000),
+                status: "pending",
+              });
+
+            if (!insertError) {
+              fetchedCount++;
+              accepted++;
+              markUrlSeen(articleUrl);
+              searchResults.push(`Alert [${source.name}]: ${item.title.replace(/<[^>]+>/g, "").substring(0, 60)}`);
+            }
+          }
+          console.log(`  → ${accepted} accepted from ${source.name}`);
+        } catch (err) {
+          console.error(`Google Alert error for ${source.name}:`, err);
+          errors.push(`Alert ${source.name}: ${err instanceof Error ? err.message : "Error"}`);
+        }
       }
     }
 
