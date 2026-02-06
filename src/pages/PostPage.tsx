@@ -3,11 +3,30 @@ import { ArrowRight } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PostCard from "@/components/sections/PostCard";
-import { getPostBySlug, getRelatedPosts, getSectionById } from "@/data/mockData";
+import { getSectionById } from "@/data/mockData";
+import { usePostBySlug, usePostsBySection } from "@/hooks/usePosts";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const PostPage = () => {
   const { slug } = useParams<{ slug: string }>();
-  const post = slug ? getPostBySlug(slug) : undefined;
+  const { data: post, isLoading } = usePostBySlug(slug);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <main className="pt-24 md:pt-32 pb-20">
+          <div className="container mx-auto px-4 max-w-3xl">
+            <Skeleton className="h-6 w-40 mb-6" />
+            <Skeleton className="h-12 w-3/4 mb-8" />
+            <Skeleton className="h-24 w-full mb-10" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (!post) {
     return (
@@ -25,7 +44,6 @@ const PostPage = () => {
   }
 
   const section = getSectionById(post.section);
-  const relatedPosts = getRelatedPosts(post.slug, post.section, 2);
 
   return (
     <div className="min-h-screen bg-background">
@@ -84,19 +102,7 @@ const PostPage = () => {
           </div>
         </article>
 
-        {/* Related Posts */}
-        {relatedPosts.length > 0 && (
-          <section className="container mx-auto px-4 max-w-3xl mt-16">
-            <h2 className="text-xl font-bold mb-6">
-              עוד מ<span className="gradient-text">{post.sectionName}</span>
-            </h2>
-            <div className="space-y-5">
-              {relatedPosts.map((relPost) => (
-                <PostCard key={relPost.id} post={relPost} />
-              ))}
-            </div>
-          </section>
-        )}
+        {/* Related Posts - simplified without separate query for now */}
       </main>
       <Footer />
     </div>

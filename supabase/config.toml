@@ -1,1 +1,10 @@
 project_id = "lnnsfnztckgouupfestv"
+
+[functions.fetch-content]
+verify_jwt = false
+
+[functions.process-content]
+verify_jwt = false
+
+[functions.manage-posts]
+verify_jwt = false
