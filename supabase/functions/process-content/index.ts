@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
 
     for (const suggestion of suggestions) {
       try {
-        const prompt = `אתה עורך תוכן מקצועי לאתר חדשות AI בעברית. 
+        const prompt = `אתה עורך תוכן מקצועי לאתר חדשות AI בעברית המיועד ל-power users ומפתחים.
 
 הסגנון שלך:
 - תמציתי ומקצועי, לא שיווקי ולא מכירתי
@@ -82,6 +82,13 @@ Deno.serve(async (req) => {
 - כתוב כאילו אתה מספר לחבר מקצוען מה חדש
 - בלי סיסמאות שיווקיות, בלי "שינוי כללי המשחק", בלי הגזמות
 - עברית טבעית ורהוטה
+
+סינון חובה — דחה את התוכן (reject: true) אם הוא:
+- תוכן שיווקי, קידום עצמי, או מכירת מוצר/שירות (כולל "X tools for $Y/mo", "limited time offer", וכו')
+- מדריך גנרי למתחילים (כמו "how to write prompts", "10 AI tips for beginners")
+- תוכן שיווקי מוסווה כתוכן ערך (self-promotion של הפרופיל שפרסם)
+- תוכן ריק מתוכן (רק קישורים, רק אימוג'ים, או שרשור קידומי)
+- פילוסופיה כללית על AI ללא מידע חדש קונקרטי
 
 ${topicsContext}
 
@@ -94,20 +101,17 @@ ${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n"
 תוכן: ${(suggestion.original_content || "").substring(0, 4000)}
 
 משימה:
-1. כתוב כותרת בעברית (קצרה, ברורה, לא שיווקית)
-2. כתוב תקציר של 1-2 משפטים בעברית
-3. כתוב תוכן מלא בעברית (3-5 פסקאות, תמציתי ומקצועי)
-4. סווג למדור המתאים ביותר מהרשימה
-5. הצע תגית קצרה (1-2 מילים)
+1. קודם כל, בדוק אם התוכן שיווקי/גנרי/ריק — אם כן, החזר {"reject": true, "reject_reason": "..."}
+2. אם התוכן רלוונטי ואיכותי:
+   - כתוב כותרת בעברית (קצרה, ברורה, לא שיווקית, מתארת את הנושא הספציפי)
+   - כתוב תקציר של 1-2 משפטים בעברית
+   - כתוב תוכן מלא בעברית (3-5 פסקאות, תמציתי ומקצועי)
+   - סווג למדור המתאים ביותר מהרשימה
+   - הצע תגית קצרה (1-2 מילים)
 
 החזר את התשובה בפורמט JSON בלבד:
-{
-  "title": "...",
-  "excerpt": "...",
-  "content": "...",
-  "section": "weekly|features|tools|viral",
-  "tag": "..."
-}`;
+אם נדחה: {"reject": true, "reject_reason": "סיבה קצרה"}
+אם מאושר: {"reject": false, "title": "...", "excerpt": "...", "content": "...", "section": "weekly|features|tools|viral", "tag": "..."}`;
 
         const response = await fetch("https://api.perplexity.ai/chat/completions", {
           method: "POST",
@@ -148,6 +152,25 @@ ${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n"
         } catch (parseErr) {
           console.error(`JSON parse error for ${suggestion.id}:`, rawContent);
           errors.push(`${suggestion.id}: Failed to parse AI response`);
+          continue;
+        }
+
+        // Check if AI rejected this content as promotional/generic
+        if (parsed.reject === true) {
+          console.log(`AI rejected ${suggestion.id}: ${parsed.reject_reason || "promotional/generic"}`);
+          const { error: rejectError } = await supabase
+            .from("content_suggestions")
+            .update({
+              status: "rejected",
+              suggested_title: `[נדחה אוטומטית] ${parsed.reject_reason || "תוכן שיווקי/גנרי"}`,
+              reviewed_at: new Date().toISOString(),
+            })
+            .eq("id", suggestion.id);
+          if (rejectError) {
+            console.error(`Reject update error for ${suggestion.id}:`, rejectError);
+          } else {
+            processedCount++;
+          }
           continue;
         }
 
