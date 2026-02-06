@@ -1,9 +1,11 @@
-import { useParams, Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PostCard from "@/components/sections/PostCard";
-import { getPostsBySection, getSectionById, type SectionId } from "@/data/mockData";
+import { getSectionById, type SectionId } from "@/data/mockData";
+import { usePostsBySection } from "@/hooks/usePosts";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface SectionPageProps {
   sectionId: SectionId;
@@ -11,7 +13,7 @@ interface SectionPageProps {
 
 const SectionPage = ({ sectionId }: SectionPageProps) => {
   const section = getSectionById(sectionId);
-  const sectionPosts = getPostsBySection(sectionId);
+  const { data: sectionPosts, isLoading } = usePostsBySection(sectionId);
 
   if (!section) return null;
 
@@ -33,9 +35,19 @@ const SectionPage = ({ sectionId }: SectionPageProps) => {
 
           {/* Posts Grid */}
           <div className="max-w-3xl mx-auto space-y-5">
-            {sectionPosts.map((post) => (
-              <PostCard key={post.id} post={post} />
-            ))}
+            {isLoading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="rounded-xl bg-card border border-border p-6">
+                  <Skeleton className="h-5 w-20 mb-3" />
+                  <Skeleton className="h-6 w-3/4 mb-2" />
+                  <Skeleton className="h-12 w-full" />
+                </div>
+              ))
+            ) : (
+              sectionPosts?.map((post) => (
+                <PostCard key={post.id} post={post} />
+              ))
+            )}
           </div>
 
           {/* Back */}

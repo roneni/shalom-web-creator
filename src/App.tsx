@@ -8,6 +8,7 @@ import SectionPage from "./pages/SectionPage";
 import PostPage from "./pages/PostPage";
 import NewsletterPage from "./pages/NewsletterPage";
 import NotFound from "./pages/NotFound";
+import AdminPage from "./pages/AdminPage";
 
 const queryClient = new QueryClient();
 
@@ -25,6 +26,7 @@ const App = () => (
           <Route path="/viral" element={<SectionPage sectionId="viral" />} />
           <Route path="/post/:slug" element={<PostPage />} />
           <Route path="/newsletter" element={<NewsletterPage />} />
+          <Route path="/admin" element={<AdminPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

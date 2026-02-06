@@ -1,16 +1,28 @@
 import { Link } from "react-router-dom";
 import { ArrowLeft, Flame } from "lucide-react";
-import { getLatestPost } from "@/data/mockData";
+import { useLatestPost } from "@/hooks/usePosts";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const HotNowCard = () => {
-  const post = getLatestPost();
+  const { data: post, isLoading } = useLatestPost();
+
+  if (isLoading) {
+    return (
+      <section className="container mx-auto px-4 -mt-12 relative z-10">
+        <div className="rounded-2xl bg-card p-6 md:p-10">
+          <Skeleton className="h-5 w-40 mb-4" />
+          <Skeleton className="h-8 w-3/4 mb-3" />
+          <Skeleton className="h-16 w-full" />
+        </div>
+      </section>
+    );
+  }
+
+  if (!post) return null;
 
   return (
     <section className="container mx-auto px-4 -mt-12 relative z-10">
-      <Link
-        to={`/post/${post.slug}`}
-        className="block group"
-      >
+      <Link to={`/post/${post.slug}`} className="block group">
         <div className="relative rounded-2xl overflow-hidden gradient-border glow-md p-[1px]">
           <div className="bg-card rounded-2xl p-6 md:p-10">
             <div className="flex items-center gap-2 mb-4">
