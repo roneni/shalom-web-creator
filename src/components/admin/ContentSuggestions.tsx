@@ -19,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Check, X, Pencil, ExternalLink, Loader2, CheckSquare } from "lucide-react";
+import { Check, X, Pencil, ExternalLink, Loader2, CheckSquare, AlertCircle } from "lucide-react";
 import { adminApi } from "@/lib/adminApi";
 import { toast } from "@/hooks/use-toast";
 
@@ -321,12 +321,14 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
             const isProcessed = !!suggestion.suggested_title && !!suggestion.suggested_content;
             const displayTitle = getDisplayTitle(suggestion);
             const isSelected = selectedIds.has(suggestion.id);
+            const isPending = suggestion.status === "pending";
+            const isUnprocessed = isPending && !isProcessed;
 
             return (
-              <Card key={suggestion.id} className={`overflow-hidden transition-colors ${isSelected ? "border-primary/50 bg-primary/5" : ""}`}>
+              <Card key={suggestion.id} className={`overflow-hidden transition-colors ${isSelected ? "border-primary/50 bg-primary/5" : ""} ${isUnprocessed ? "opacity-70 border-dashed" : ""}`}>
                 <CardHeader className="pb-3">
                   <div className="flex items-start gap-3">
-                    {suggestion.status === "pending" && (
+                    {isPending && (
                       <Checkbox
                         checked={isSelected}
                         onCheckedChange={() => toggleSelect(suggestion.id)}
@@ -339,6 +341,12 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
                         {displayTitle}
                       </CardTitle>
                       <div className="flex flex-wrap gap-2">
+                        {isUnprocessed && (
+                          <Badge variant="outline" className="text-xs border-amber-500/50 text-amber-600 bg-amber-50">
+                            <AlertCircle className="h-3 w-3 ml-1" />
+                            ממתין לעיבוד AI
+                          </Badge>
+                        )}
                         {suggestion.suggested_section && (
                           <Badge variant="secondary" className="text-xs">
                             {SECTION_LABELS[suggestion.suggested_section] || suggestion.suggested_section}
@@ -349,18 +357,20 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
                             {suggestion.suggested_tag}
                           </Badge>
                         )}
-                        <Badge
-                          variant={
-                            suggestion.status === "approved"
-                              ? "default"
-                              : suggestion.status === "rejected"
-                              ? "destructive"
-                              : "secondary"
-                          }
-                          className="text-xs"
-                        >
-                          {STATUS_LABELS[suggestion.status]}
-                        </Badge>
+                        {!isUnprocessed && (
+                          <Badge
+                            variant={
+                              suggestion.status === "approved"
+                                ? "default"
+                                : suggestion.status === "rejected"
+                                ? "destructive"
+                                : "secondary"
+                            }
+                            className="text-xs"
+                          >
+                            {STATUS_LABELS[suggestion.status]}
+                          </Badge>
+                        )}
                       </div>
                     </div>
                     {suggestion.source_url && (
@@ -388,7 +398,7 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
                       {new Date(suggestion.fetched_at).toLocaleDateString("he-IL")}
                     </span>
 
-                    {suggestion.status === "pending" && (
+                    {isPending && isProcessed && (
                       <div className="flex gap-2 items-center">
                         <Button
                           size="sm"
@@ -415,6 +425,23 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
                           <Check className="h-3.5 w-3.5 mr-1" />
                           אשר
                         </Button>
+                      </div>
+                    )}
+
+                    {isPending && isUnprocessed && (
+                      <div className="flex gap-2 items-center">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => rejectMutation.mutate(suggestion.id)}
+                          disabled={rejectMutation.isPending}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                        <span className="text-xs text-amber-600">
+                          לחץ ״עבד הצעות״ בכותרת
+                        </span>
                       </div>
                     )}
                   </div>

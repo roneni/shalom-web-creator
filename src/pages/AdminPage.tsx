@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RefreshCw, LogOut, Loader2, Search, TrendingUp } from "lucide-react";
+import { RefreshCw, LogOut, Loader2, Search, TrendingUp, Cpu } from "lucide-react";
 import { useAdmin } from "@/hooks/useAdmin";
 import { adminApi } from "@/lib/adminApi";
 import { toast } from "@/hooks/use-toast";
@@ -16,6 +16,7 @@ const AdminPage = () => {
   const [isFetching, setIsFetching] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [isTrending, setIsTrending] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   if (!isLoggedIn) {
     return <AdminLogin onLogin={login} />;
@@ -126,15 +127,38 @@ const AdminPage = () => {
     }
   };
 
+  const handleProcessOnly = async () => {
+    setIsProcessing(true);
+    try {
+      toast({ title: "🤖 מעבד הצעות ממתינות עם AI..." });
+      const result = await adminApi.processOnly(password);
+      queryClient.invalidateQueries({ queryKey: ["suggestions"] });
+
+      if (result.processed > 0) {
+        toast({ title: `✅ עובדו ${result.processed} הצעות — מוכנות לאישור` });
+      } else {
+        toast({ title: "אין הצעות חדשות לעיבוד" });
+      }
+    } catch (err) {
+      toast({
+        title: "שגיאת עיבוד",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background" dir="rtl">
       <header className="border-b border-border">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <h1 className="text-lg font-bold">דשבורד ניהולי</h1>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
             <Button
               onClick={handleTrendingSearch}
-              disabled={isTrending || isSearching || isFetching}
+              disabled={isTrending || isSearching || isFetching || isProcessing}
               size="sm"
               variant="outline"
               className="border-destructive/50 text-destructive hover:bg-destructive/10"
@@ -148,7 +172,7 @@ const AdminPage = () => {
             </Button>
             <Button
               onClick={handleSearchContent}
-              disabled={isSearching || isFetching || isTrending}
+              disabled={isSearching || isFetching || isTrending || isProcessing}
               size="sm"
               variant="outline"
             >
@@ -157,11 +181,25 @@ const AdminPage = () => {
               ) : (
                 <Search className="h-4 w-4 ml-2" />
               )}
-              חפש חדשות AI
+              חפש חדשות
+            </Button>
+            <Button
+              onClick={handleProcessOnly}
+              disabled={isProcessing || isFetching || isSearching || isTrending}
+              size="sm"
+              variant="outline"
+              className="border-primary/50 text-primary hover:bg-primary/10"
+            >
+              {isProcessing ? (
+                <Loader2 className="h-4 w-4 animate-spin ml-2" />
+              ) : (
+                <Cpu className="h-4 w-4 ml-2" />
+              )}
+              עבד הצעות
             </Button>
             <Button
               onClick={handleFetchAndProcess}
-              disabled={isFetching || isSearching || isTrending}
+              disabled={isFetching || isSearching || isTrending || isProcessing}
               size="sm"
             >
               {isFetching ? (
@@ -169,7 +207,7 @@ const AdminPage = () => {
               ) : (
                 <RefreshCw className="h-4 w-4 ml-2" />
               )}
-              שלוף תוכן חדש
+              שלוף ועבד
             </Button>
             <Button variant="ghost" size="sm" onClick={logout}>
               <LogOut className="h-4 w-4" />
