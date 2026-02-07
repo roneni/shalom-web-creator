@@ -83,7 +83,7 @@ const PostPage = () => {
           </div>
 
           {/* Title */}
-          <h1 className="text-3xl md:text-4xl lg:text-5xl font-black leading-tight mb-8">
+          <h1 className="text-3xl md:text-4xl font-black leading-snug mb-8">
             {post.title}
           </h1>
 
@@ -93,7 +93,7 @@ const PostPage = () => {
           </p>
 
           {/* Content — supports Super-Mentor structured format */}
-          <div className="prose prose-invert max-w-none">
+          <div className="prose prose-invert max-w-[42rem]">
             {post.content.split("\n\n").map((paragraph, i) => {
               const trimmed = paragraph.trim();
 
@@ -129,7 +129,7 @@ const PostPage = () => {
                 return (
                   <blockquote
                     key={i}
-                    className="border-r-4 border-primary pr-4 pl-0 mr-0 my-4 text-lg md:text-xl font-medium italic text-foreground/80 leading-relaxed"
+                    className="border-s-4 border-primary ps-4 pe-0 ms-0 my-4 text-lg md:text-xl font-medium italic text-foreground/80 leading-relaxed"
                   >
                     {trimmed.slice(2)}
                   </blockquote>

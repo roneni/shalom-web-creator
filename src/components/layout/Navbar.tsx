@@ -48,7 +48,7 @@ const Navbar = () => {
               </Link>
             ))}
             <Link to="/newsletter">
-              <Button size="sm" className="gradient-bg mr-2 hover:opacity-90 transition-opacity">
+              <Button size="sm" variant="ghost" className="me-2 text-muted-foreground hover:text-foreground">
                 <Mail className="h-4 w-4" />
                 ניוזלטר
               </Button>
@@ -80,7 +80,7 @@ const Navbar = () => {
                     : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                 }`}
               >
-                <span className="ml-2">{section.icon}</span>
+                <span className="ms-2">{section.icon}</span>
                 {section.name}
               </Link>
             ))}

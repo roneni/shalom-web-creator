@@ -11,7 +11,7 @@ const SectionCardItem = ({ section, excludePostSlug }: { section: (typeof sectio
   const showPost = latestPost && latestPost.slug !== excludePostSlug;
 
   return (
-    <div className="group rounded-xl bg-card border border-border hover:border-primary/30 transition-all duration-300 hover:glow-sm">
+    <div className="group rounded-xl bg-card border border-border hover:border-primary/30 transition-all duration-300">
       <div className="p-6">
         <div className="flex items-center gap-3 mb-4">
           <span className="text-2xl">{section.icon}</span>
