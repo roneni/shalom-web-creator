@@ -158,12 +158,14 @@ const AdminPage = () => {
       const result = await adminApi.fetchTwitterLikes(password);
       
       if (result.fetched > 0) {
-        const skippedMsg = result.skipped ? ` (${result.skipped} לא-AI סוננו)` : "";
-        toast({ title: `✅ נשלפו ${result.fetched} ציוצי AI מלייקים${skippedMsg}` });
+        const skippedMsg = result.skipped ? ` (${result.skipped} סוננו)` : "";
+        toast({ title: `✅ נשלפו ${result.fetched} ציוצים מתאימים${skippedMsg}` });
         queryClient.invalidateQueries({ queryKey: ["suggestions"] });
       } else {
-        const skippedMsg = result.skipped ? ` (${result.skipped} לא-AI סוננו)` : "";
-        toast({ title: `אין ציוצי AI חדשים בלייקים${skippedMsg}` });
+        const editorialMsg = result.editorial_rejected ? `${result.editorial_rejected} לא התאימו לרוח האתר` : "";
+        const skippedMsg = result.skipped ? `${result.skipped} לא-AI סוננו` : "";
+        const details = [editorialMsg, skippedMsg].filter(Boolean).join(" • ");
+        toast({ title: `אין ציוצים חדשים מתאימים`, description: details || undefined });
       }
 
       if (result.errors?.length) {

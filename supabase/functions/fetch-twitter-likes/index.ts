@@ -107,6 +107,82 @@ async function generateOAuth1Header(
 
   return authHeader;
 }
+// AI editorial filter — check if a batch of tweets fit the site's voice
+async function filterByEditorialFit(
+  tweets: { text: string; username: string }[],
+  LOVABLE_API_KEY: string
+): Promise<Set<number>> {
+  const validIndices = new Set<number>();
+  if (tweets.length === 0) return validIndices;
+
+  const tweetList = tweets
+    .map((t, i) => `[${i}] @${t.username}: ${t.text.substring(0, 300)}`)
+    .join("\n\n");
+
+  try {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-lite",
+        messages: [
+          {
+            role: "system",
+            content: `אתה פילטר עריכה לאתר חדשות AI ישראלי פרימיום. האתר מתמקד ב:
+- חידושים טכנולוגיים משמעותיים (השקות מוצרים, מודלים חדשים, פריצות דרך)
+- כלים שימושיים עם ערך מעשי למפתחים ו-power users
+- מגמות ויראליות אמיתיות בעולם ה-AI
+- ניתוחים אסטרטגיים ותובנות מקצועיות
+
+דחה (לא מתאים):
+- תוכן שיווקי, קידום עצמי, או מכירת מוצרים
+- שיחות חברתיות, בדיחות, ממים, דעות אישיות
+- פוסטים ללא תוכן ענייני (רק לינק בלי הקשר)
+- תוכן פיננסי/כלכלי (מניות, גיוסי הון, שווי שוק)
+- מדריכים גנריים ושטחיים
+- תוכן שהוא בעיקר self-promotion
+
+החזר JSON בלבד: {"approved": [0, 2, 5]} — מערך של אינדקסים מאושרים. אם אף אחד לא מתאים: {"approved": []}`,
+          },
+          { role: "user", content: `סנן את הציוצים הבאים:\n\n${tweetList}` },
+        ],
+        temperature: 0.1,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`Editorial filter API error: ${response.status}`);
+      // On failure, approve all (fail-open for likes)
+      tweets.forEach((_, i) => validIndices.add(i));
+      return validIndices;
+    }
+
+    const data = await response.json();
+    const raw = data.choices?.[0]?.message?.content || "";
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      const approved = parsed.approved || [];
+      for (const idx of approved) {
+        if (typeof idx === "number" && idx >= 0 && idx < tweets.length) {
+          validIndices.add(idx);
+        }
+      }
+    } else {
+      // Can't parse — fail-open
+      tweets.forEach((_, i) => validIndices.add(i));
+    }
+  } catch (err) {
+    console.error("Editorial filter error:", err);
+    // Fail-open
+    tweets.forEach((_, i) => validIndices.add(i));
+  }
+
+  return validIndices;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -176,7 +252,10 @@ Deno.serve(async (req) => {
 
     let fetchedCount = 0;
     let skippedCount = 0;
+    let editorialRejected = 0;
     const errors: string[] = [];
+
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     // --- Fetch Likes ---
     try {
@@ -214,13 +293,21 @@ Deno.serve(async (req) => {
           }
         }
 
+        // Phase 1: Collect candidates (keyword filter)
+        const candidates: {
+          username: string;
+          tweetUrl: string;
+          title: string;
+          content: string;
+          text: string;
+        }[] = [];
+
         for (const tweet of tweets) {
           const username = userMap[tweet.author_id] || "unknown";
           const tweetUrl = `https://x.com/${username}/status/${tweet.id}`;
 
           if (!isNewUrl(tweetUrl)) continue;
 
-          // Pre-filter: only AI-related content
           const tweetText = tweet.text || "";
           if (!isAiRelated(tweetText)) {
             console.log(`⏭️ Skipped non-AI like: ${tweetText.substring(0, 60)}`);
@@ -228,7 +315,7 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          // Extract any external URLs from tweet entities
+          // Extract external URLs
           const externalUrls: string[] = [];
           if (tweet.entities?.urls) {
             for (const urlEntity of tweet.entities.urls) {
@@ -239,30 +326,62 @@ Deno.serve(async (req) => {
             }
           }
 
-          const text = tweet.text || "";
-          const cleanText = text.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim();
+          const cleanText = tweetText.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim();
           const title = cleanText.length > 5
             ? `❤️ @${username}: ${cleanText.length > 100 ? cleanText.substring(0, 100) + "…" : cleanText}`
             : `❤️ @${username} — ציוץ`;
 
-          const contentParts = [text];
+          const contentParts = [tweetText];
           if (externalUrls.length > 0) {
             contentParts.push("\n\nלינקים מהציוץ:\n" + externalUrls.join("\n"));
           }
 
+          candidates.push({
+            username,
+            tweetUrl,
+            title,
+            content: contentParts.join(""),
+            text: tweetText,
+          });
+        }
+
+        // Phase 2: AI editorial filter (batch)
+        let approvedIndices: Set<number>;
+        if (LOVABLE_API_KEY && candidates.length > 0) {
+          console.log(`🧠 Running editorial filter on ${candidates.length} candidates...`);
+          approvedIndices = await filterByEditorialFit(
+            candidates.map(c => ({ text: c.text, username: c.username })),
+            LOVABLE_API_KEY
+          );
+          editorialRejected = candidates.length - approvedIndices.size;
+          console.log(`📋 Editorial: ${approvedIndices.size} approved, ${editorialRejected} rejected`);
+        } else {
+          // No AI key — approve all (fallback)
+          approvedIndices = new Set(candidates.map((_, i) => i));
+        }
+
+        // Phase 3: Save approved candidates
+        for (let i = 0; i < candidates.length; i++) {
+          if (!approvedIndices.has(i)) {
+            console.log(`🚫 Editorial rejected: ${candidates[i].title.substring(0, 60)}`);
+            skippedCount++;
+            continue;
+          }
+
+          const c = candidates[i];
           const { error: insertError } = await supabase
             .from("content_suggestions")
             .insert({
-              source_url: tweetUrl,
-              original_title: title,
-              original_content: contentParts.join(""),
+              source_url: c.tweetUrl,
+              original_title: c.title,
+              original_content: c.content,
               status: "pending",
             });
 
           if (!insertError) {
             fetchedCount++;
-            markSeen(tweetUrl);
-            console.log(`✅ Liked tweet saved: ${title.substring(0, 60)}`);
+            markSeen(c.tweetUrl);
+            console.log(`✅ Liked tweet saved: ${c.title.substring(0, 60)}`);
           }
         }
       }
@@ -274,13 +393,13 @@ Deno.serve(async (req) => {
     // --- Bookmarks skipped ---
     // Bookmarks endpoint requires OAuth 2.0 User Context (PKCE flow)
     // which is not supported in this simple edge function setup.
-    // TODO: implement OAuth 2.0 PKCE flow for bookmarks support
 
     return new Response(
       JSON.stringify({
-        message: `Fetched ${fetchedCount} AI-related tweets (skipped ${skippedCount} non-AI)`,
+        message: `Fetched ${fetchedCount} tweets (${skippedCount} filtered out, ${editorialRejected} by editorial)`,
         fetched: fetchedCount,
         skipped: skippedCount,
+        editorial_rejected: editorialRejected,
         errors: errors.length > 0 ? errors : undefined,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
