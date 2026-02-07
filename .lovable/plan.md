@@ -1,145 +1,83 @@
 
 
-# מערכת שליפת תוכן אוטומטית + דשבורד אישור
+# שיפור קריאות, היררכיה וניקיון ויזואלי
 
-## מה נבנה
-
-מערכת שלמה שעושה את הדברים הבאים:
-1. שומרת רשימת מקורות (חשבונות X ואתרים) במסד נתונים
-2. שולפת תוכן מהמקורות האלה באמצעות APIs
-3. מעבדת את התוכן עם AI — מסננת, מתרגמת, מתמצתת ומשכתבת בסגנון שלך
-4. מציגה לך הצעות תוכן בדשבורד ניהולי
-5. מה שאתה מאשר — עולה לאתר ומחליף את ה-mock data
+שיפורים ממוקדים ב-6 תחומים, ללא שינוי זהות ויזואלית או הוספת פיצ'רים.
 
 ---
 
-## מבנה טכני
+## 1. טיפוגרפיה בהירו — גודל וגובה שורה
 
-### שלב 1: הפעלת Backend (Lovable Cloud)
+**בעיה:** כותרת ה-Hero ב-`text-7xl` (4.5rem) גדולה מדי ויוצרת תחושה צפופה, במיוחד בעברית שבה התווים רחבים יותר. `leading-tight` לא מספק מספיק אוויר.
 
-הפעלת Supabase backend עם מסד נתונים לשמירת:
-- **טבלת `sources`** — מקורות תוכן (URL, סוג, שם, פעיל/לא)
-- **טבלת `content_suggestions`** — הצעות תוכן שנשלפו ועובדו (ממתינות לאישור)
-- **טבלת `published_posts`** — פוסטים שאושרו ועולים לאתר
-- **טבלת `topics`** — נושאי AI שאתה רוצה להתמקד בהם (ישלחו בשלב הבא)
+**שינויים:**
+- `HeroSection.tsx` — כותרת h1: מ-`text-7xl` ל-`text-6xl` (3.75rem) בדסקטופ, שמירה על `text-4xl` במובייל
+- גובה שורה: מ-`leading-tight` ל-`leading-snug` (1.375) — מוסיף אוויר בין השורות
+- תת-כותרת: מ-`text-xl` ל-`text-lg` בדסקטופ, עם `leading-relaxed` (כבר קיים — נשאר)
+- `PostPage.tsx` — כותרת פוסט: מ-`text-5xl` ל-`text-4xl` בדסקטופ, עם `leading-snug`
 
-מבנה טבלאות:
+## 2. ניגודיות טקסט (WCAG AA)
 
-```text
-sources
-├── id (uuid)
-├── type ('twitter' | 'website')
-├── url (text)
-├── name (text)
-├── active (boolean)
-└── created_at (timestamp)
+**בעיה:** `--muted-foreground` מוגדר כ-`220 10% 55%` (כ-`hsl(220,10%,55%)`) — על רקע `hsl(230,25%,7%)` זה נותן יחס ניגודיות של כ-4.2:1. מספיק ל-AA עבור טקסט גדול אבל בעייתי עבור טקסט רגיל (דורש 4.5:1).
 
-content_suggestions
-├── id (uuid)
-├── source_id (uuid -> sources)
-├── source_url (text) - הלינק המקורי
-├── original_title (text) - כותרת מקורית
-├── original_content (text) - תוכן מקורי
-├── suggested_title (text) - כותרת מעובדת בעברית
-├── suggested_excerpt (text) - תקציר מעובד
-├── suggested_content (text) - תוכן מעובד
-├── suggested_section (text) - מדור מוצע
-├── suggested_tag (text) - תגית מוצעת
-├── status ('pending' | 'approved' | 'rejected')
-├── fetched_at (timestamp)
-└── reviewed_at (timestamp)
+**שינויים ב-`index.css`:**
+- `--muted-foreground`: מ-`220 10% 55%` ל-`220 10% 62%` — מעלה את הבהירות ל-62%, שמגיע ליחס של כ-5.5:1 (WCAG AA)
+- `--foreground`: נשאר `220 20% 95%` — כבר מצוין (יחס ~15:1)
+- `--secondary-foreground`: מ-`220 20% 90%` ל-`220 15% 88%` — ניקוי קל
 
-published_posts
-├── id (uuid)
-├── suggestion_id (uuid -> content_suggestions)
-├── slug (text)
-├── title (text)
-├── excerpt (text)
-├── content (text)
-├── section (text)
-├── tag (text)
-├── date (date)
-├── published (boolean)
-└── created_at (timestamp)
-```
+## 3. הפחתת רעש דקורטיבי
 
-### שלב 2: חיבור Firecrawl + Perplexity
+**בעיה:** הירו מכיל שני blobs גדולים (`bg-primary/20`, `bg-accent/15`), glow effects על כפתורים וכרטיסים, ואנימציות `pulse-glow` ו-`animate-fade-in` שמוסיפים רעש ויזואלי ללא תרומה לתוכן.
 
-- **Firecrawl** — לשליפת תוכן מאתרים (scrape) ומחשבונות X
-- **Perplexity** — לעיבוד AI: תרגום, תמצות, שכתוב בסגנון שלך, וסיווג למדור הנכון
+**שינויים:**
+- `HeroSection.tsx` — הפחתת אטימות ה-blobs מ-`/20` ל-`/8` ומ-`/15` ל-`/6`, והסרת `animate-fade-in` מכל האלמנטים (הטקסט יופיע ישר)
+- `HotNowCard.tsx` — הסרת `glow-md` מהכרטיס, הסרת `animate-pulse-glow` מאיקון הלהבה
+- `SectionCards.tsx` — הסרת `hover:glow-sm` מכרטיסי מדורים
+- `PostCard.tsx` — הסרת `hover:glow-sm` מכרטיסי פוסטים
+- `NewsletterCTA.tsx` — הפחתת אטימות ה-blobs מ-`/20` ל-`/8` ומ-`/15` ל-`/6`, הסרת `glow-sm` מהכפתור
+- כפתורי CTA — הסרת `glow-sm` מכל הכפתורים (Hero, Newsletter, Navbar)
 
-### שלב 3: Edge Functions
+## 4. רוחב טקסט לקריאה נוחה
 
-3 פונקציות backend:
+**בעיה:** בדף פוסט, `max-w-3xl` (48rem) הוא סביר, אבל תוכן הגוף עצמו יכול להיות מצומצם יותר לקריאה נוחה (המלצה: 60-75 תווים לשורה, כ-40rem לעברית).
 
-1. **`fetch-content`** — שולפת תוכן חדש מכל המקורות הפעילים
-   - עוברת על כל מקור בטבלת sources
-   - משתמשת ב-Firecrawl לשליפה
-   - שומרת את התוכן הגולמי ב-content_suggestions
+**שינויים:**
+- `PostPage.tsx` — עטיפת אזור ה-content (prose) ב-`max-w-[42rem]` (672px) — מצמצם שורות לאורך קריאה נוח
+- שמירה על `max-w-3xl` (768px) עבור ה-article wrapper הכולל (מטא-דאטה, כותרת)
 
-2. **`process-content`** — מעבדת תוכן גולמי עם AI
-   - לוקחת הצעות שעדיין לא עובדו
-   - שולחת ל-Perplexity עם הנחיות: תמצת, תרגם לעברית, כתוב בסגנון תמציתי ומקצועי, סווג למדור
-   - מעדכנת את השדות suggested_* בטבלה
+## 5. תמיכה מלאה ב-RTL וטיפוגרפיה עברית
 
-3. **`manage-posts`** — ניהול אישור ופרסום
-   - מקבלת פעולת approve/reject מהדשבורד
-   - כשמאושר — יוצרת רשומה ב-published_posts
-   - הפוסט מופיע באתר
+**בעיה:** חלק מהכיוונים hardcoded ל-LTR (כגון `mr-auto`, `ml-2`, `pr-4`, `pl-0`). צריך להשתמש ב-logical properties של Tailwind (`ms-`, `me-`, `ps-`, `pe-`).
 
-### שלב 4: דשבורד ניהולי
+**שינויים:**
+- `HotNowCard.tsx` — `mr-auto` ל-`ms-auto`
+- `Navbar.tsx` — `mr-2` ל-`me-2`
+- `PostPage.tsx` — blockquote: `border-r-4 pr-4 pl-0 mr-0` ל-`border-s-4 ps-4 pe-0 ms-0` (border-start לתמיכה ב-RTL)
+- מובייל navbar: `ml-2` ל-`ms-2`
 
-עמוד `/admin` (מוגן בסיסמה פשוטה) שמכיל:
+## 6. היררכיית CTA — חיזוק ראשי, הנמכת משני
 
-- **רשימת הצעות תוכן** — כרטיסים עם:
-  - כותרת מוצעת
-  - תקציר
-  - מדור מוצע
-  - מקור מקורי (לינק)
-  - כפתורי: אשר / דחה / ערוך
-- **פילטר לפי סטטוס**: ממתין / מאושר / נדחה
-- **פילטר לפי מדור**: weekly / features / tools / viral
-- **כפתור "שלוף תוכן חדש"** — מפעיל את fetch-content + process-content
-- **ניהול מקורות** — הוספה/הסרה של מקורות
+**בעיה:** שני כפתורי ה-Hero באותו גודל ומשקל ויזואלי. הניוזלטר לא צריך את אותו המשקל כמו ה-CTA הראשי.
 
-### שלב 5: חיבור האתר למסד נתונים
-
-- החלפת mockData.ts בשאילתות ממסד הנתונים
-- הפוסטים באתר יגיעו מטבלת published_posts
-- הדפים הקיימים (דף בית, מדורים, פוסט בודד) ימשכו נתונים מהדאטהבייס
-- fallback ל-mock data אם אין עדיין תוכן מאושר
+**שינויים:**
+- `HeroSection.tsx` — כפתור ראשי (גלו מה חדש): נשאר `size="lg"`, מקבל `font-semibold`
+- כפתור משני (ניוזלטר): מ-`size="lg"` ל-`size="default"`, עם `text-muted-foreground` במקום ברירת מחדל — ברור שהוא משני
+- `Navbar.tsx` — כפתור ניוזלטר בנאב: מ-`gradient-bg` ל-`variant="ghost"` עם טקסט רגיל — מפחית תחרות ויזואלית עם הנאביגציה
 
 ---
 
-## מקורות שיוזנו למערכת
+## סיכום קבצים שישתנו
 
-### חשבונות X/Twitter
-HadasAdler, kerenshahar5, taltimes2, DavidOndrej1, OsaurusAI, JackWoth98, JulianGoldieSEO, HeyAbhishek, thetripathi58, learn2vibe, bigaiguy, lazukars, hasantoxr, MS_BASE44, OpenAI
+| קובץ | שינויים |
+|---|---|
+| `src/index.css` | ניגודיות muted-foreground, secondary-foreground |
+| `src/components/home/HeroSection.tsx` | טיפוגרפיה, blobs, אנימציות, היררכיית CTA |
+| `src/components/home/HotNowCard.tsx` | glow, pulse, RTL fix |
+| `src/components/home/SectionCards.tsx` | glow |
+| `src/components/home/NewsletterCTA.tsx` | blobs, glow |
+| `src/components/sections/PostCard.tsx` | glow |
+| `src/components/layout/Navbar.tsx` | RTL fix, כפתור ניוזלטר |
+| `src/pages/PostPage.tsx` | רוחב קריאה, טיפוגרפיה, RTL blockquote |
 
-### אתרים
-il.chat, openai.com, labs.google, anthropic.com, deepmind.google, microsoft.com/ai, ai.meta.com, x.ai, mistral.ai, cohere.com, perplexity.ai, stability.ai, huggingface.co, midjourney.com, character.ai, runwayml.com
-
----
-
-## סדר עבודה
-
-| שלב | מה נבנה | תלויות |
-|-----|---------|--------|
-| 1 | הפעלת Lovable Cloud + מסד נתונים | - |
-| 2 | חיבור Firecrawl ו-Perplexity | שלב 1 |
-| 3 | Edge function לשליפת תוכן | שלב 2 |
-| 4 | Edge function לעיבוד AI | שלב 2 |
-| 5 | דשבורד ניהולי (עמוד admin) | שלב 1 |
-| 6 | חיבור הדשבורד ל-edge functions | שלבים 3-5 |
-| 7 | החלפת mock data בנתונים מהדאטהבייס | שלב 1 |
-| 8 | הוספת נושאי AI (שלב הבא שלך) | שלב 1 |
-
----
-
-## הערות חשובות
-
-- **שליפה מ-X/Twitter**: Firecrawl יכול לשלוף תוכן מפרופילי X, אבל יש מגבלות. אם לא יעבוד מספיק טוב, נוכל להוסיף RSS feeds או כלים אחרים
-- **סגנון כתיבה**: ה-prompt ל-Perplexity יכלול הנחיות מפורטות לכתיבה בסגנון שלך — תמציתי, מקצועי, לא שיווקי, לא העתק-הדבק
-- **נושאי AI**: ברגע שתשלח את הנושאים, נוסיף אותם לטבלת topics ונשתמש בהם כפילטר בעיבוד התוכן
-- **אבטחה**: הדשבורד יהיה מוגן כדי שרק אתה תוכל לגשת אליו
+לא מתווספים קבצים חדשים, לא מתווספים תלויות, לא משתנה פלטת הצבעים.
 
