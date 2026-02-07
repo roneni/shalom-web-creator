@@ -159,17 +159,11 @@ const AdminPage = () => {
       
       if (result.fetched > 0) {
         const skippedMsg = result.skipped ? ` (${result.skipped} לא-AI סוננו)` : "";
-        toast({ title: `✅ נשלפו ${result.fetched} ציוצי AI מלייקים/סימניות${skippedMsg}` });
-        // Auto-process
-        toast({ title: "🤖 מעבד עם AI..." });
-        const processResult = await adminApi.processOnly(password);
+        toast({ title: `✅ נשלפו ${result.fetched} ציוצי AI מלייקים${skippedMsg}` });
         queryClient.invalidateQueries({ queryKey: ["suggestions"] });
-        if (processResult.processed > 0) {
-          toast({ title: `✅ עובדו ${processResult.processed} הצעות — מוכנות לאישור` });
-        }
       } else {
         const skippedMsg = result.skipped ? ` (${result.skipped} לא-AI סוננו)` : "";
-        toast({ title: `אין ציוצי AI חדשים בלייקים/סימניות${skippedMsg}` });
+        toast({ title: `אין ציוצי AI חדשים בלייקים${skippedMsg}` });
       }
 
       if (result.errors?.length) {
