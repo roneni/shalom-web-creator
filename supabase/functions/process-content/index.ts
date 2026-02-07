@@ -43,7 +43,21 @@ const PRIMARY_DOMAINS = [
   "openai.com", "anthropic.com", "deepmind.google", "blog.google",
   "ai.meta.com", "huggingface.co", "stability.ai", "midjourney.com",
   "nvidia.com", "microsoft.com", "apple.com", "x.ai", "mistral.ai",
-  "perplexity.ai", "cohere.com", "runwayml.com",
+  "perplexity.ai", "cohere.com", "runwayml.com", "ai.com",
+  "character.ai", "inflection.ai", "adept.ai", "together.ai",
+  "groq.com", "databricks.com", "scale.ai",
+];
+
+// Company names/keywords that indicate content is ABOUT a primary source,
+// even when published on 3rd-party sites (PR Newswire, TechCrunch, etc.)
+const PRIMARY_COMPANY_KEYWORDS = [
+  "openai", "anthropic", "deepmind", "google ai", "meta ai",
+  "hugging face", "huggingface", "stability ai", "midjourney",
+  "nvidia", "microsoft ai", "apple intelligence", "xai", "x.ai",
+  "mistral", "perplexity", "cohere", "runway", "ai.com",
+  "character.ai", "inflection", "adept ai", "together ai",
+  "groq", "databricks", "scale ai", "gemini", "claude",
+  "gpt-5", "gpt-6", "chatgpt", "copilot",
 ];
 
 function isPrimarySourceUrl(url: string): boolean {
@@ -52,6 +66,12 @@ function isPrimarySourceUrl(url: string): boolean {
     const hostname = new URL(url).hostname;
     return PRIMARY_DOMAINS.some(d => hostname === d || hostname.endsWith(`.${d}`));
   } catch { return false; }
+}
+
+// Check if content is ABOUT a primary source company (even from 3rd-party URLs)
+function isAboutPrimarySource(title: string, content: string): boolean {
+  const text = `${title} ${content}`.toLowerCase();
+  return PRIMARY_COMPANY_KEYWORDS.some(keyword => text.includes(keyword));
 }
 
 function isHomepageUrl(url: string): boolean {
@@ -351,9 +371,17 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const isPrimary = isPrimarySourceUrl(suggestion.source_url || "");
+        const isPrimaryUrl = isPrimarySourceUrl(suggestion.source_url || "");
+        const isAboutPrimary = isAboutPrimarySource(
+          suggestion.original_title || "", 
+          (suggestion.original_content || "").substring(0, 2000)
+        );
+        const isPrimary = isPrimaryUrl || isAboutPrimary;
         const primaryNote = isPrimary 
-          ? `\n⚠️ שים לב: תוכן זה מגיע ממקור ראשי (${suggestion.source_url}). מקורות ראשיים כמו OpenAI, Anthropic, Google DeepMind וכו' מפרסמים תוכן איכותי. אל תדחה אותם כ"תוכן שיווקי" או "כתבה כלכלית" אלא אם הם באמת עוסקים בנתונים פיננסיים (מניות, גיוסי הון, שווי שוק). השקת מוצר חדש היא לא כתבה כלכלית!\n`
+          ? `\n⚠️ חשוב מאוד: תוכן זה ${isPrimaryUrl ? "מגיע ממקור ראשי" : "עוסק בחברת AI מובילה"} (${suggestion.source_url}). 
+מקורות ראשיים ותוכן על חברות AI מובילות כמו OpenAI, Anthropic, Google DeepMind, ai.com וכו' — אל תדחה כ"תוכן שיווקי" גם אם הוא מגיע מאתר צד-שלישי כמו PR Newswire, TechCrunch, The Verge וכו'. 
+הודעה רשמית של חברה על מוצר חדש, שירות חדש, או כיוון אסטרטגי חדש — זו חדשות טכנולוגיות לגיטימיות, לא "תוכן שיווקי"!
+דחה רק אם התוכן עוסק בעיקר בנתונים פיננסיים (מניות, גיוסי הון, שווי שוק) ולא במוצר/טכנולוגיה.\n`
           : "";
           
         const prompt = `אתה עורך תוכן מקצועי לאתר חדשות AI בעברית המיועד ל-power users ומפתחים.
