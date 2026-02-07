@@ -158,7 +158,8 @@ const AdminPage = () => {
       const result = await adminApi.fetchTwitterLikes(password);
       
       if (result.fetched > 0) {
-        toast({ title: `✅ נשלפו ${result.fetched} ציוצים מלייקים וסימניות` });
+        const skippedMsg = result.skipped ? ` (${result.skipped} לא-AI סוננו)` : "";
+        toast({ title: `✅ נשלפו ${result.fetched} ציוצי AI מלייקים/סימניות${skippedMsg}` });
         // Auto-process
         toast({ title: "🤖 מעבד עם AI..." });
         const processResult = await adminApi.processOnly(password);
@@ -167,7 +168,8 @@ const AdminPage = () => {
           toast({ title: `✅ עובדו ${processResult.processed} הצעות — מוכנות לאישור` });
         }
       } else {
-        toast({ title: "אין ציוצים חדשים בלייקים/סימניות" });
+        const skippedMsg = result.skipped ? ` (${result.skipped} לא-AI סוננו)` : "";
+        toast({ title: `אין ציוצי AI חדשים בלייקים/סימניות${skippedMsg}` });
       }
 
       if (result.errors?.length) {
