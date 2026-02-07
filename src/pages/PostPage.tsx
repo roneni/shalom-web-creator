@@ -76,20 +76,94 @@ const PostPage = () => {
             {post.excerpt}
           </p>
 
-          {/* Content */}
+          {/* Content — supports Super-Mentor structured format */}
           <div className="prose prose-invert max-w-none">
-            {post.content.split("\n\n").map((paragraph, i) => (
-              <p
-                key={i}
-                className="text-foreground/90 leading-relaxed mb-6 text-base md:text-lg"
-                dangerouslySetInnerHTML={{
-                  __html: paragraph
-                    .replace(/\*\*(.*?)\*\*/g, '<strong class="text-foreground font-bold">$1</strong>')
-                    .replace(/\n- /g, '<br/>• ')
-                    .replace(/\n/g, '<br/>'),
-                }}
-              />
-            ))}
+            {post.content.split("\n\n").map((paragraph, i) => {
+              const trimmed = paragraph.trim();
+
+              // Super-Mentor: PREMIUM HOOK header
+              if (trimmed === "**PREMIUM HOOK**") {
+                return (
+                  <div key={i} className="text-xs font-bold tracking-[0.2em] uppercase text-primary/60 mb-1 mt-2">
+                    PREMIUM HOOK
+                  </div>
+                );
+              }
+
+              // Super-Mentor: THE 1% CASE header
+              if (trimmed === "**THE 1% CASE**") {
+                return (
+                  <div key={i} className="text-xs font-bold tracking-[0.2em] uppercase text-primary/60 mt-10 mb-1">
+                    THE 1% CASE
+                  </div>
+                );
+              }
+
+              // Super-Mentor: CURATOR'S VERDICT header
+              if (trimmed === "**CURATOR'S VERDICT**") {
+                return (
+                  <div key={i} className="text-xs font-bold tracking-[0.2em] uppercase text-primary/60 mt-10 mb-1">
+                    CURATOR&apos;S VERDICT
+                  </div>
+                );
+              }
+
+              // Super-Mentor: Verdict blockquote (starts with >)
+              if (trimmed.startsWith("> ")) {
+                return (
+                  <blockquote
+                    key={i}
+                    className="border-r-4 border-primary pr-4 pl-0 mr-0 my-4 text-lg md:text-xl font-medium italic text-foreground/80 leading-relaxed"
+                  >
+                    {trimmed.slice(2)}
+                  </blockquote>
+                );
+              }
+
+              // Hook paragraph (first content after PREMIUM HOOK) — render bold
+              // Detect by checking if it's a single long sentence without markdown headers
+              const isHookParagraph = i > 0 && post.content.split("\n\n")[i - 1]?.trim() === "**PREMIUM HOOK**";
+              if (isHookParagraph) {
+                return (
+                  <p
+                    key={i}
+                    className="text-xl md:text-2xl font-bold text-foreground leading-snug mb-8"
+                  >
+                    {trimmed}
+                  </p>
+                );
+              }
+
+              // 1% Case paragraph — slightly different styling
+              const isPrevOnePercent = i > 0 && post.content.split("\n\n")[i - 1]?.trim() === "**THE 1% CASE**";
+              if (isPrevOnePercent) {
+                return (
+                  <div
+                    key={i}
+                    className="bg-muted/30 border border-border rounded-lg p-4 my-4 text-sm md:text-base text-muted-foreground leading-relaxed"
+                    dangerouslySetInnerHTML={{
+                      __html: trimmed
+                        .replace(/\*\*(.*?)\*\*/g, '<strong class="text-foreground font-bold">$1</strong>')
+                        .replace(/\n/g, '<br/>'),
+                    }}
+                  />
+                );
+              }
+
+              // Regular paragraph
+              return (
+                <p
+                  key={i}
+                  className="text-foreground/90 leading-relaxed mb-6 text-base md:text-lg"
+                  dangerouslySetInnerHTML={{
+                    __html: trimmed
+                      .replace(/\*\*(.*?)\*\*/g, '<strong class="text-foreground font-bold">$1</strong>')
+                      .replace(/\n- /g, '<br/>• ')
+                      .replace(/\n/g, '<br/>'),
+                  }}
+                />
+              );
+            })}
           </div>
 
           {/* Source Link */}
