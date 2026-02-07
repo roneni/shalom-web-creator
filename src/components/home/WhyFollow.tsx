@@ -1,44 +1,48 @@
-import { Filter, Zap, Globe } from "lucide-react";
+import { ScanSearch, Sparkles, PenLine } from "lucide-react";
 
-const reasons = [
+const steps = [
   {
-    icon: Filter,
-    title: "מסונן",
-    description: "לא כל חדשות ה-AI מעניינות. אנחנו בוחרים רק את מה ששווה את הזמן שלכם.",
+    icon: ScanSearch,
+    title: "סריקה",
+    description: "כל שבוע אנחנו סורקים מאות מקורות — בלוגים, רשתות חברתיות, ריליסים רשמיים ומאמרים. רוב מה שמתפרסם הוא רעש.",
   },
   {
-    icon: Zap,
-    title: "מזוקק",
-    description: "תוכן קצר, חד וממוקד. בלי מילים מיותרות, בלי fluff. ישר לעניין.",
+    icon: Sparkles,
+    title: "סינון",
+    description: "מה שעובר נבחן לעומק: מה באמת חדש כאן? למי זה רלוונטי? מה ההשלכה המעשית? ללא hype, ללא clickbait.",
   },
   {
-    icon: Globe,
-    title: "בעברית",
-    description: "כי תוכן טוב על AI מגיע לכם בשפה שלכם. ברור, נגיש ומקצועי.",
+    icon: PenLine,
+    title: "כתיבה",
+    description: "התוכן נכתב בעברית מקצועית, לא מתורגם. כל פריט עובר עריכה ובדיקת עובדות לפני פרסום.",
   },
 ];
 
 const WhyFollow = () => {
   return (
-    <section className="container mx-auto px-4 py-20">
-      <h2 className="text-2xl md:text-3xl font-bold text-center mb-4">
-        למה <span className="gradient-text">לעקוב</span>?
+    <section className="container mx-auto px-4 py-24">
+      <h2 className="text-2xl md:text-3xl font-bold mb-12">
+        איך התוכן נוצר
       </h2>
-      <p className="text-center text-muted-foreground mb-12 max-w-md mx-auto">
-        שלוש סיבות טובות להישאר מעודכנים
-      </p>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {reasons.map((reason) => (
+        {steps.map((step, index) => (
           <div
-            key={reason.title}
-            className="text-center p-8 rounded-xl bg-card border border-border hover:border-primary/30 transition-all duration-300"
+            key={step.title}
+            className="p-6 rounded-xl bg-card border border-border"
           >
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl gradient-bg mb-5">
-              <reason.icon className="h-6 w-6 text-primary-foreground" />
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-signal/10 flex items-center justify-center mt-0.5">
+                <step.icon className="h-5 w-5 text-signal" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-mono text-muted-foreground">{String(index + 1).padStart(2, '0')}</span>
+                  <h3 className="text-lg font-bold">{step.title}</h3>
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">{step.description}</p>
+              </div>
             </div>
-            <h3 className="text-xl font-bold mb-3">{reason.title}</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">{reason.description}</p>
           </div>
         ))}
       </div>

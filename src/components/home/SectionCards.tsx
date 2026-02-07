@@ -27,7 +27,7 @@ const SectionCardItem = ({ section, excludePostSlug }: { section: (typeof sectio
             className="block rounded-lg bg-secondary/50 p-4 mb-4 hover:bg-secondary transition-colors"
           >
             <div className="flex items-center gap-2 mb-1">
-              <p className="text-xs text-muted-foreground">{latestPost.date}</p>
+              <p className="text-xs text-muted-foreground font-mono">{latestPost.date}</p>
               <TopicBadge tag={latestPost.tag} />
             </div>
             <h4 className="font-semibold text-sm leading-snug">{latestPost.title}</h4>
@@ -48,7 +48,7 @@ const SectionCardItem = ({ section, excludePostSlug }: { section: (typeof sectio
 
 const SectionCards = ({ excludePostSlug }: { excludePostSlug?: string }) => {
   return (
-    <section className="container mx-auto px-4 py-20">
+    <section className="container mx-auto px-4 py-24">
       <h2 className="text-2xl md:text-3xl font-bold text-center mb-12">
         המדורים
       </h2>

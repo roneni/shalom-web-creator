@@ -79,7 +79,7 @@ const PostPage = () => {
               {post.tag}
             </span>
             <TopicBadge tag={post.tag} />
-            <span className="text-sm text-muted-foreground">{post.date}</span>
+            <span className="text-sm text-muted-foreground font-mono">{post.date}</span>
           </div>
 
           {/* Title */}

@@ -28,6 +28,9 @@
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
 
+    --signal: 0 78% 55%;
+    --signal-foreground: 0 0% 100%;
+
     --border: 230 15% 18%;
     --input: 230 15% 20%;
     --ring: 250 80% 60%;
@@ -82,14 +85,6 @@
     -webkit-mask-composite: xor;
     mask-composite: exclude;
     pointer-events: none;
-  }
-
-  .glow-sm {
-    box-shadow: 0 0 20px -5px hsl(250 80% 60% / 0.3);
-  }
-
-  .glow-md {
-    box-shadow: 0 0 40px -10px hsl(250 80% 60% / 0.4);
   }
 
   .glass {
