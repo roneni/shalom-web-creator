@@ -6,6 +6,59 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-admin-password, x-cron-secret, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ============================================================
+// URL Normalization
+// ============================================================
+function normalizeUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    const trackingParams = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+      "ref", "source", "queryly", "mc_cid", "mc_eid", "fbclid", "gclid"];
+    trackingParams.forEach(p => u.searchParams.delete(p));
+    u.hash = "";
+    let normalized = u.toString().replace(/\/$/, "");
+    normalized = normalized.replace(/\/\/www\./, "//");
+    return normalized;
+  } catch {
+    return url.replace(/\/$/, "");
+  }
+}
+
+// ============================================================
+// Semantic Dedup Engine
+// ============================================================
+const STOP_WORDS = new Set([
+  "the", "a", "an", "is", "are", "was", "were", "for", "to", "of", "in", "on",
+  "at", "by", "with", "and", "or", "its", "it", "that", "this", "as", "new",
+  "has", "have", "had", "can", "could", "will", "would", "may", "now", "also",
+  "about", "from", "how", "what", "when", "where", "who", "which", "more",
+  "most", "than", "into", "over", "up", "out", "just", "been", "being",
+  "between", "after", "before", "says", "said",
+  "של", "את", "על", "עם", "לא", "גם", "או", "כי", "אם", "מה", "זה", "היא",
+  "הוא", "אל", "כל", "עוד", "יותר", "בין", "אחרי", "לפני",
+]);
+
+function extractKeyTerms(title: string): string[] {
+  const cleaned = title.toLowerCase()
+    .replace(/[⭐\[\](){}:;,."'!?—–\-\/\\]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.split(" ").filter(w => w.length > 2 && !STOP_WORDS.has(w));
+}
+
+function isSimilarToAny(newTitle: string, existingTitles: string[]): boolean {
+  const newTerms = extractKeyTerms(newTitle);
+  if (newTerms.length < 2) return false;
+  for (const existing of existingTitles) {
+    const existingTerms = extractKeyTerms(existing);
+    if (existingTerms.length < 2) continue;
+    const overlap = newTerms.filter(t => existingTerms.includes(t)).length;
+    const similarity = overlap / Math.min(newTerms.length, existingTerms.length);
+    if (similarity >= 0.6 && overlap >= 3) return true;
+  }
+  return false;
+}
+
 // Known RSS feed URLs for AI blogs
 const RSS_FEEDS: Record<string, string> = {
   "openai.com": "https://openai.com/blog/rss.xml",
@@ -14,46 +67,34 @@ const RSS_FEEDS: Record<string, string> = {
   "huggingface.co": "https://huggingface.co/blog/feed.xml",
 };
 
-// Simple RSS/XML parser — extracts items with title, link, pubDate
 function parseRSSItems(xml: string): Array<{ title: string; link: string; pubDate: string; description: string }> {
   const items: Array<{ title: string; link: string; pubDate: string; description: string }> = [];
   const itemRegex = /<item>([\s\S]*?)<\/item>|<entry>([\s\S]*?)<\/entry>/gi;
   let match;
-
   while ((match = itemRegex.exec(xml)) !== null) {
     const block = match[1] || match[2] || "";
-
     const titleMatch = block.match(/<title[^>]*>([\s\S]*?)<\/title>/);
     const linkMatch = block.match(/<link[^>]*href="([^"]*)"/) || block.match(/<link[^>]*>([\s\S]*?)<\/link>/);
     const pubDateMatch = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/) || block.match(/<published>([\s\S]*?)<\/published>/) || block.match(/<updated>([\s\S]*?)<\/updated>/);
     const descMatch = block.match(/<description>([\s\S]*?)<\/description>/) || block.match(/<summary[^>]*>([\s\S]*?)<\/summary>/);
-
     const title = (titleMatch?.[1] || "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").trim();
     const link = (linkMatch?.[1] || linkMatch?.[2] || "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").trim();
     const pubDate = (pubDateMatch?.[1] || "").trim();
     const description = (descMatch?.[1] || descMatch?.[2] || "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/<[^>]+>/g, "").trim();
-
-    if (title && link) {
-      items.push({ title, link, pubDate, description });
-    }
+    if (title && link) { items.push({ title, link, pubDate, description }); }
   }
-
   return items;
 }
 
-// Check if a date is within the last N days
 function isRecent(dateStr: string, days: number): boolean {
-  if (!dateStr) return true; // If no date, assume recent
+  if (!dateStr) return true;
   try {
     const date = new Date(dateStr);
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     return date >= cutoff;
-  } catch {
-    return true;
-  }
+  } catch { return true; }
 }
 
-// Pre-filter: reject finance/economics/stock articles by title keywords
 function isFinanceContent(title: string): boolean {
   if (!title) return false;
   const t = title.toLowerCase();
@@ -70,47 +111,26 @@ function isFinanceContent(title: string): boolean {
   return patterns.some((p) => p.test(t));
 }
 
-// Check if a URL looks like an index/category page (not an article)
 function isIndexPage(url: string): boolean {
   try {
     const u = new URL(url);
     const path = u.pathname.replace(/\/$/, "");
-    
-    // Root or single-segment category paths are likely index pages
     if (!path || path === "") return true;
-    
     const segments = path.split("/").filter(Boolean);
-    
-    // Single-segment paths like /ai or /technology are usually category pages
     if (segments.length <= 1) return true;
-    
-    // Known category patterns
     const categoryPatterns = [
-      /^\/category\//i,
-      /^\/topics?\//i,
-      /^\/tags?\//i,
-      /^\/news\/?$/i,
-      /^\/blog\/?$/i,
-      /^\/technology\/?$/i,
-      /^\/tech\/?$/i,
-      /^\/artificial-intelligence\/?$/i,
-      /\/ai\/?$/i,
+      /^\/category\//i, /^\/topics?\//i, /^\/tags?\//i,
+      /^\/news\/?$/i, /^\/blog\/?$/i, /^\/technology\/?$/i, /^\/tech\/?$/i,
+      /^\/artificial-intelligence\/?$/i, /\/ai\/?$/i,
     ];
-    
     if (categoryPatterns.some((p) => p.test(path))) return true;
-    
-    // URLs ending with common non-article patterns
     if (path.endsWith("/about") || path.endsWith("/pricing") || 
         path.endsWith("/contact") || path.endsWith("/careers") ||
         path.endsWith("/products") || path.endsWith("/features")) return true;
-    
     return false;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
 
-// Build search queries from topics — with date context for better results
 function buildSearchQueries(topics: Array<{ name: string; name_he: string; description: string | null }>): string[] {
   const now = new Date();
   const monthNames = ["January", "February", "March", "April", "May", "June", 
@@ -163,7 +183,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Validate auth: admin password, service role key, or cron trigger
     const adminPassword = req.headers.get("x-admin-password");
     const cronHeader = req.headers.get("x-cron");
     const authHeader = req.headers.get("authorization") || "";
@@ -195,31 +214,39 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     let fetchedCount = 0;
+    let dedupedCount = 0;
     const errors: string[] = [];
     const searchResults: string[] = [];
 
-    // Collect all existing URLs once to avoid repeated DB lookups
-    const { data: existingUrls } = await supabase
+    // Collect ALL existing URLs + titles once for dedup
+    const { data: existingRows } = await supabase
       .from("content_suggestions")
-      .select("source_url")
+      .select("source_url, original_title, suggested_title")
       .not("source_url", "is", null);
     
-    const urlSet = new Set((existingUrls || []).map((r: { source_url: string | null }) => r.source_url));
+    const urlSet = new Set<string>();
+    const titleList: string[] = [];
+    for (const row of (existingRows || [])) {
+      if (row.source_url) {
+        urlSet.add(row.source_url);
+        urlSet.add(normalizeUrl(row.source_url));
+      }
+      const t = (row.suggested_title || row.original_title || "").toLowerCase().trim();
+      if (t.length > 10 && !t.startsWith("[נדחה")) titleList.push(t);
+    }
     
     const isNewUrl = (url: string): boolean => {
-      if (urlSet.has(url)) return false;
-      // Also check without trailing slash and with/without www
-      const normalized = url.replace(/\/$/, "");
-      if (urlSet.has(normalized) || urlSet.has(normalized + "/")) return false;
-      return true;
+      const normalized = normalizeUrl(url);
+      return !urlSet.has(url) && !urlSet.has(normalized);
     };
     
-    const markUrlSeen = (url: string) => {
+    const markSeen = (url: string, title: string) => {
       urlSet.add(url);
-      urlSet.add(url.replace(/\/$/, ""));
+      urlSet.add(normalizeUrl(url));
+      if (title && title.length > 10) titleList.push(title.toLowerCase().trim());
     };
 
-    // === PART 1: Static RSS Feeds (blogs) ===
+    // === PART 1: Static RSS Feeds ===
     console.log("=== Fetching static RSS feeds ===");
     for (const [domain, feedUrl] of Object.entries(RSS_FEEDS)) {
       try {
@@ -227,25 +254,18 @@ Deno.serve(async (req) => {
         const rssResponse = await fetch(feedUrl, {
           headers: { "User-Agent": "Mozilla/5.0 AI News Bot" },
         });
-
-        if (!rssResponse.ok) {
-          console.log(`RSS: ${domain} returned ${rssResponse.status}, skipping`);
-          continue;
-        }
+        if (!rssResponse.ok) { console.log(`RSS: ${domain} returned ${rssResponse.status}`); continue; }
 
         const xml = await rssResponse.text();
         const items = parseRSSItems(xml);
         const recentItems = items.filter((item) => isRecent(item.pubDate, 7)).slice(0, 5);
 
-        console.log(`RSS: ${domain} — ${items.length} total, ${recentItems.length} recent`);
-
         for (const item of recentItems) {
+          const normalizedLink = normalizeUrl(item.link);
           if (!isNewUrl(item.link)) continue;
           if (isIndexPage(item.link)) continue;
-          if (isFinanceContent(item.title)) {
-            console.log(`  RSS skipped finance: "${item.title.substring(0, 60)}"`);
-            continue;
-          }
+          if (isFinanceContent(item.title)) continue;
+          if (isSimilarToAny(item.title, titleList)) { dedupedCount++; continue; }
 
           const content = item.description || item.title;
           if (content.length < 20) continue;
@@ -253,7 +273,7 @@ Deno.serve(async (req) => {
           const { error: insertError } = await supabase
             .from("content_suggestions")
             .insert({
-              source_url: item.link,
+              source_url: normalizedLink,
               original_title: item.title.substring(0, 500),
               original_content: content.substring(0, 10000),
               status: "pending",
@@ -261,17 +281,16 @@ Deno.serve(async (req) => {
 
           if (!insertError) {
             fetchedCount++;
-            markUrlSeen(item.link);
+            markSeen(normalizedLink, item.title);
             searchResults.push(`RSS [${domain}]: ${item.title.substring(0, 60)}`);
           }
         }
       } catch (err) {
-        console.error(`RSS error for ${domain}:`, err);
         errors.push(`RSS ${domain}: ${err instanceof Error ? err.message : "Error"}`);
       }
     }
 
-    // === PART 1.5: Google Alerts RSS Feeds from DB ===
+    // === PART 1.5: Google Alerts RSS ===
     console.log("=== Fetching Google Alerts RSS feeds ===");
     const { data: rssSources } = await supabase
       .from("sources")
@@ -282,26 +301,17 @@ Deno.serve(async (req) => {
     if (rssSources && rssSources.length > 0) {
       for (const source of rssSources) {
         try {
-          console.log(`Google Alert: Fetching "${source.name}"`);
           const rssResponse = await fetch(source.url, {
             headers: { "User-Agent": "Mozilla/5.0 AI News Bot" },
           });
-
-          if (!rssResponse.ok) {
-            console.log(`Google Alert: ${source.name} returned ${rssResponse.status}, skipping`);
-            continue;
-          }
+          if (!rssResponse.ok) continue;
 
           const xml = await rssResponse.text();
           const items = parseRSSItems(xml);
-          // Google Alerts Atom feeds use <updated> — take last 7 days
           const recentItems = items.filter((item) => isRecent(item.pubDate, 7)).slice(0, 10);
-
-          console.log(`Google Alert: ${source.name} — ${items.length} total, ${recentItems.length} recent`);
 
           let accepted = 0;
           for (const item of recentItems) {
-            // Google Alerts links are redirect URLs — extract the real URL
             let articleUrl = item.link;
             try {
               const u = new URL(articleUrl);
@@ -309,24 +319,24 @@ Deno.serve(async (req) => {
               if (realUrl) articleUrl = realUrl;
             } catch { /* keep original */ }
 
+            const normalizedUrl = normalizeUrl(articleUrl);
             if (!isNewUrl(articleUrl)) continue;
             if (isIndexPage(articleUrl)) continue;
-            if (isFinanceContent(item.title)) {
-              console.log(`  Skipped finance: "${item.title.substring(0, 60)}"`);
-              continue;
-            }
+            if (isFinanceContent(item.title)) continue;
 
-            // Clean HTML from Google Alerts descriptions
+            const cleanTitle = item.title.replace(/<[^>]+>/g, "");
+            if (isSimilarToAny(cleanTitle, titleList)) { dedupedCount++; continue; }
+
             const cleanDesc = (item.description || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-            const content = cleanDesc || item.title;
+            const content = cleanDesc || cleanTitle;
             if (content.length < 20) continue;
 
             const { error: insertError } = await supabase
               .from("content_suggestions")
               .insert({
                 source_id: source.id,
-                source_url: articleUrl,
-                original_title: item.title.replace(/<[^>]+>/g, "").substring(0, 500),
+                source_url: normalizedUrl,
+                original_title: cleanTitle.substring(0, 500),
                 original_content: content.substring(0, 10000),
                 status: "pending",
               });
@@ -334,21 +344,19 @@ Deno.serve(async (req) => {
             if (!insertError) {
               fetchedCount++;
               accepted++;
-              markUrlSeen(articleUrl);
-              searchResults.push(`Alert [${source.name}]: ${item.title.replace(/<[^>]+>/g, "").substring(0, 60)}`);
+              markSeen(normalizedUrl, cleanTitle);
+              searchResults.push(`Alert [${source.name}]: ${cleanTitle.substring(0, 60)}`);
             }
           }
           console.log(`  → ${accepted} accepted from ${source.name}`);
         } catch (err) {
-          console.error(`Google Alert error for ${source.name}:`, err);
           errors.push(`Alert ${source.name}: ${err instanceof Error ? err.message : "Error"}`);
         }
       }
     }
 
-    // === PART 2: Active Topic Search via Firecrawl ===
+    // === PART 2: Active Topic Search ===
     console.log("=== Active topic search ===");
-
     const { data: topics } = await supabase
       .from("topics")
       .select("name, name_he, description")
@@ -356,8 +364,6 @@ Deno.serve(async (req) => {
 
     if (topics && topics.length > 0) {
       const allQueries = buildSearchQueries(topics);
-
-      // Pick 5 random topics to search this run (rotating)
       const shuffled = allQueries.sort(() => Math.random() - 0.5);
       const selectedQueries = shuffled.slice(0, 5);
 
@@ -366,23 +372,12 @@ Deno.serve(async (req) => {
           console.log(`Search: "${query.substring(0, 80)}..."`);
           const searchResponse = await fetch("https://api.firecrawl.dev/v1/search", {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              query,
-              limit: 5,
-              scrapeOptions: {
-                formats: ["markdown"],
-                onlyMainContent: true,
-              },
-            }),
+            headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ query, limit: 5, scrapeOptions: { formats: ["markdown"], onlyMainContent: true } }),
           });
 
           const searchData = await searchResponse.json();
           if (!searchResponse.ok || !searchData.success) {
-            console.error(`Search failed for query:`, searchData);
             errors.push(`Search: ${searchData.error || "Failed"}`);
             continue;
           }
@@ -393,46 +388,22 @@ Deno.serve(async (req) => {
           for (const result of results) {
             const url = result.url;
             if (!url) continue;
-
-            // Skip social media, forums, non-article pages
-            if (url.includes("reddit.com") || url.includes("twitter.com") ||
-                url.includes("x.com") || url.includes("youtube.com") ||
-                url.includes("linkedin.com") || url.includes("facebook.com") ||
-                url.includes("wikipedia.org")) {
-              continue;
-            }
-
-            // Skip index/category pages
-            if (isIndexPage(url)) {
-              console.log(`  Skipped index page: ${url}`);
-              continue;
-            }
-
-            // Dedup
+            if (/reddit\.com|twitter\.com|x\.com|youtube\.com|linkedin\.com|facebook\.com|wikipedia\.org/i.test(url)) continue;
+            if (isIndexPage(url)) continue;
             if (!isNewUrl(url)) continue;
 
             const title = result.title || result.metadata?.title || "";
             const content = result.markdown || result.description || "";
-
-            // Require meaningful content
             if (content.length < 200) continue;
-            
-            // Skip pages with titles that look like category/index pages
-            if (/^(AI News|Artificial Intelligence|Technology|Latest|Home|Blog)\s*[\|–—:]/i.test(title)) {
-              console.log(`  Skipped generic title: "${title.substring(0, 60)}"`);
-              continue;
-            }
-            
-            // Skip finance/economics/stock articles
-            if (isFinanceContent(title)) {
-              console.log(`  Skipped finance content: "${title.substring(0, 60)}"`);
-              continue;
-            }
+            if (/^(AI News|Artificial Intelligence|Technology|Latest|Home|Blog)\s*[\|–—:]/i.test(title)) continue;
+            if (isFinanceContent(title)) continue;
+            if (isSimilarToAny(title, titleList)) { dedupedCount++; continue; }
 
+            const normalizedUrl = normalizeUrl(url);
             const { error: insertError } = await supabase
               .from("content_suggestions")
               .insert({
-                source_url: url,
+                source_url: normalizedUrl,
                 original_title: title.substring(0, 500),
                 original_content: content.substring(0, 10000),
                 status: "pending",
@@ -441,23 +412,20 @@ Deno.serve(async (req) => {
             if (!insertError) {
               fetchedCount++;
               accepted++;
-              markUrlSeen(url);
+              markSeen(normalizedUrl, title);
               searchResults.push(`Search: ${title.substring(0, 60)}`);
             }
           }
           
           console.log(`  → ${results.length} results, ${accepted} accepted`);
-
-          // Small delay between searches
           await new Promise((r) => setTimeout(r, 500));
         } catch (err) {
-          console.error(`Search error:`, err);
           errors.push(`Search: ${err instanceof Error ? err.message : "Error"}`);
         }
       }
     }
 
-    // === PART 3: General AI news search (targeted at recent articles) ===
+    // === PART 3: General AI news search ===
     console.log("=== General AI news search ===");
     const now = new Date();
     const monthNames = ["January", "February", "March", "April", "May", "June",
@@ -472,21 +440,10 @@ Deno.serve(async (req) => {
     const generalQuery = generalQueries[Math.floor(Math.random() * generalQueries.length)];
 
     try {
-      console.log(`General search: "${generalQuery.substring(0, 80)}..."`);
       const generalResponse = await fetch("https://api.firecrawl.dev/v1/search", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          query: generalQuery,
-          limit: 5,
-          scrapeOptions: {
-            formats: ["markdown"],
-            onlyMainContent: true,
-          },
-        }),
+        headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ query: generalQuery, limit: 5, scrapeOptions: { formats: ["markdown"], onlyMainContent: true } }),
       });
 
       const generalData = await generalResponse.json();
@@ -497,22 +454,22 @@ Deno.serve(async (req) => {
         for (const result of results) {
           const url = result.url;
           if (!url) continue;
-          if (url.includes("reddit.com") || url.includes("twitter.com") ||
-              url.includes("x.com") || url.includes("youtube.com")) continue;
+          if (/reddit\.com|twitter\.com|x\.com|youtube\.com/i.test(url)) continue;
           if (isIndexPage(url)) continue;
           if (!isNewUrl(url)) continue;
 
           const title = result.title || result.metadata?.title || "";
           const content = result.markdown || result.description || "";
           if (content.length < 200) continue;
-          
           if (/^(AI News|Artificial Intelligence|Technology|Latest|Home|Blog)\s*[\|–—:]/i.test(title)) continue;
           if (isFinanceContent(title)) continue;
+          if (isSimilarToAny(title, titleList)) { dedupedCount++; continue; }
 
+          const normalizedUrl = normalizeUrl(url);
           const { error: insertError } = await supabase
             .from("content_suggestions")
             .insert({
-              source_url: url,
+              source_url: normalizedUrl,
               original_title: title.substring(0, 500),
               original_content: content.substring(0, 10000),
               status: "pending",
@@ -521,27 +478,25 @@ Deno.serve(async (req) => {
           if (!insertError) {
             fetchedCount++;
             accepted++;
-            markUrlSeen(url);
+            markSeen(normalizedUrl, title);
             searchResults.push(`General: ${title.substring(0, 60)}`);
           }
         }
         console.log(`General search: ${results.length} results, ${accepted} accepted`);
       }
     } catch (err) {
-      console.error("General search error:", err);
       errors.push(`General search: ${err instanceof Error ? err.message : "Error"}`);
     }
 
-    // === PART 4: Auto-trigger processing if we found new content ===
+    // === PART 4: Auto-trigger processing ===
     let approvedCount = 0;
     let totalProcessed = 0;
     
     if (fetchedCount > 0) {
-      console.log(`Found ${fetchedCount} new items, triggering AI processing...`);
+      console.log(`Found ${fetchedCount} new items (${dedupedCount} deduped), triggering AI processing...`);
       try {
         const processUrl = `${supabaseUrl}/functions/v1/process-content`;
         let hasMore = true;
-
         while (hasMore) {
           const processResponse = await fetch(processUrl, {
             method: "POST",
@@ -551,17 +506,13 @@ Deno.serve(async (req) => {
               Authorization: `Bearer ${supabaseKey}`,
             },
           });
-
           if (processResponse.ok) {
             const processResult = await processResponse.json();
             totalProcessed += processResult.processed || 0;
             hasMore = (processResult.processed || 0) >= 5;
-          } else {
-            hasMore = false;
-          }
+          } else { hasMore = false; }
         }
 
-        // Count how many actually survived AI filtering (pending with content)
         const { count } = await supabase
           .from("content_suggestions")
           .select("*", { count: "exact", head: true })
@@ -570,20 +521,16 @@ Deno.serve(async (req) => {
           .not("suggested_content", "is", null);
         
         approvedCount = count || 0;
-        
-        console.log(`AI processing complete: ${totalProcessed} processed, ${approvedCount} pending for review`);
       } catch (processErr) {
-        console.error("Auto-process error:", processErr);
         errors.push(`Auto-process: ${processErr instanceof Error ? processErr.message : "Error"}`);
       }
-    } else {
-      console.log("No new items found this run");
     }
 
     return new Response(
       JSON.stringify({
-        message: `Search found ${fetchedCount} items, ${approvedCount} approved for review`,
+        message: `Search: ${fetchedCount} found, ${dedupedCount} deduped, ${approvedCount} approved`,
         fetched: fetchedCount,
+        deduped: dedupedCount,
         processed: totalProcessed,
         approved: approvedCount,
         results: searchResults,

@@ -6,35 +6,54 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-admin-password, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Extract Twitter username from URL like https://x.com/OpenAI
+// ============================================================
+// URL Normalization — ensures consistent dedup across all sources
+// ============================================================
+function normalizeUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    // Remove tracking query params
+    const trackingParams = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+      "ref", "source", "queryly", "mc_cid", "mc_eid", "fbclid", "gclid"];
+    trackingParams.forEach(p => u.searchParams.delete(p));
+    // Remove hash
+    u.hash = "";
+    // Remove trailing slash
+    let normalized = u.toString().replace(/\/$/, "");
+    // Remove www.
+    normalized = normalized.replace(/\/\/www\./, "//");
+    return normalized;
+  } catch {
+    return url.replace(/\/$/, "");
+  }
+}
+
+// Extract Twitter username from URL
 function extractTwitterUsername(url: string): string | null {
   const match = url.match(/(?:x\.com|twitter\.com)\/(@?(\w+))/i);
   return match ? match[2] : null;
 }
 
-// Pre-filter obvious promotional/spam tweets before sending to AI
+// Pre-filter obvious promotional/spam tweets
 const SPAM_PATTERNS = [
-  /\$\d[\d,]*\+?\s*(IN|OFF|FOR)/i,           // "$55,000+ IN", "$59/MO"
-  /\b(GET|GRAB|CLAIM)\s+(YOUR|THIS|IT)\b/i,   // "Get your", "Grab this"
-  /\b\d+H?\s*LEFT\b/i,                        // "16H LEFT", "24H LEFT"
-  /LIMITED\s+(TIME|OFFER|SPOT)/i,              // "Limited time"
-  /\bFREE\s+(ACCESS|TRIAL|DOWNLOAD)\b/i,      // "Free access"
-  /🚀.*\$\d/,                                  // Emoji + price pattern
-  /\bDISCOUNT\b.*\b\d+%/i,                    // "Discount 50%"
-  /\b(HURRY|ACT\s+NOW|DON'T\s+MISS)\b/i,     // Urgency language
-  /\b(SIGN\s+UP|SUBSCRIBE|JOIN)\s+(NOW|TODAY|HERE)\b/i, // CTA
-  /\/mo\b.*\btools?\b/i,                       // "$X/mo tools"
+  /\$\d[\d,]*\+?\s*(IN|OFF|FOR)/i,
+  /\b(GET|GRAB|CLAIM)\s+(YOUR|THIS|IT)\b/i,
+  /\b\d+H?\s*LEFT\b/i,
+  /LIMITED\s+(TIME|OFFER|SPOT)/i,
+  /\bFREE\s+(ACCESS|TRIAL|DOWNLOAD)\b/i,
+  /🚀.*\$\d/,
+  /\bDISCOUNT\b.*\b\d+%/i,
+  /\b(HURRY|ACT\s+NOW|DON'T\s+MISS)\b/i,
+  /\b(SIGN\s+UP|SUBSCRIBE|JOIN)\s+(NOW|TODAY|HERE)\b/i,
+  /\/mo\b.*\btools?\b/i,
 ];
 
 function isPromotionalContent(text: string): boolean {
   const matchCount = SPAM_PATTERNS.filter(p => p.test(text)).length;
-  // If 2+ patterns match, it's very likely promotional
   return matchCount >= 2;
 }
 
-// Build a meaningful title from tweet text (not just @handle — date)
 function buildTweetTitle(username: string, text: string): string {
-  // Remove URLs and @mentions for a cleaner title
   const cleaned = text
     .replace(/https?:\/\/\S+/g, "")
     .replace(/@\w+/g, "")
@@ -47,22 +66,49 @@ function buildTweetTitle(username: string, text: string): string {
   return `@${username} — ציוץ`;
 }
 
-// Fetch tweets from Twitter API v2 using search/recent
+// Semantic dedup — same as in process-content
+const STOP_WORDS = new Set([
+  "the", "a", "an", "is", "are", "was", "were", "for", "to", "of", "in", "on",
+  "at", "by", "with", "and", "or", "its", "it", "that", "this", "as", "new",
+  "has", "have", "had", "can", "could", "will", "would", "may", "now", "also",
+  "about", "from", "how", "what", "when", "where", "who", "which", "more",
+  "most", "than", "into", "over", "up", "out", "just", "been", "being",
+  "between", "after", "before", "says", "said",
+  "של", "את", "על", "עם", "לא", "גם", "או", "כי", "אם", "מה", "זה", "היא",
+  "הוא", "אל", "כל", "עוד", "יותר", "בין", "אחרי", "לפני",
+]);
+
+function extractKeyTerms(title: string): string[] {
+  const cleaned = title.toLowerCase()
+    .replace(/[⭐\[\](){}:;,."'!?—–\-\/\\]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.split(" ").filter(w => w.length > 2 && !STOP_WORDS.has(w));
+}
+
+function isSimilarToAny(newTitle: string, existingTitles: string[]): boolean {
+  const newTerms = extractKeyTerms(newTitle);
+  if (newTerms.length < 2) return false;
+  for (const existing of existingTitles) {
+    const existingTerms = extractKeyTerms(existing);
+    if (existingTerms.length < 2) continue;
+    const overlap = newTerms.filter(t => existingTerms.includes(t)).length;
+    const similarity = overlap / Math.min(newTerms.length, existingTerms.length);
+    if (similarity >= 0.6 && overlap >= 3) return true;
+  }
+  return false;
+}
+
 async function fetchTweetsForUsers(
   usernames: string[],
   bearerToken: string
 ): Promise<Array<{ username: string; text: string; id: string; created_at: string; url: string }>> {
   const tweets: Array<{ username: string; text: string; id: string; created_at: string; url: string }> = [];
-
-  // Build query in batches (max query length ~512 chars for free tier)
-  // Each "from:username" is ~20 chars, so ~20 users per batch
   const batchSize = 15;
   for (let i = 0; i < usernames.length; i += batchSize) {
     const batch = usernames.slice(i, i + batchSize);
     const query = batch.map((u) => `from:${u}`).join(" OR ");
-
     console.log(`Fetching tweets with query: ${query}`);
-
     const params = new URLSearchParams({
       query,
       max_results: "20",
@@ -70,54 +116,30 @@ async function fetchTweetsForUsers(
       expansions: "author_id",
       "user.fields": "username",
     });
-
     const response = await fetch(
       `https://api.x.com/2/tweets/search/recent?${params.toString()}`,
-      {
-        headers: {
-          Authorization: `Bearer ${bearerToken}`,
-        },
-      }
+      { headers: { Authorization: `Bearer ${bearerToken}` } }
     );
-
     if (!response.ok) {
       const errText = await response.text();
       console.error(`Twitter API error (${response.status}):`, errText);
       continue;
     }
-
     const data = await response.json();
-
-    if (!data.data || data.data.length === 0) {
-      console.log("No tweets found for batch");
-      continue;
-    }
-
-    // Build author_id -> username map
+    if (!data.data || data.data.length === 0) { console.log("No tweets found for batch"); continue; }
     const userMap: Record<string, string> = {};
     if (data.includes?.users) {
-      for (const user of data.includes.users) {
-        userMap[user.id] = user.username;
-      }
+      for (const user of data.includes.users) { userMap[user.id] = user.username; }
     }
-
     for (const tweet of data.data) {
       const username = userMap[tweet.author_id] || "unknown";
       tweets.push({
-        username,
-        text: tweet.text,
-        id: tweet.id,
-        created_at: tweet.created_at,
+        username, text: tweet.text, id: tweet.id, created_at: tweet.created_at,
         url: `https://x.com/${username}/status/${tweet.id}`,
       });
     }
-
-    // Small delay between batches to respect rate limits
-    if (i + batchSize < usernames.length) {
-      await new Promise((r) => setTimeout(r, 1000));
-    }
+    if (i + batchSize < usernames.length) { await new Promise((r) => setTimeout(r, 1000)); }
   }
-
   return tweets;
 }
 
@@ -127,8 +149,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Validate auth: admin password, service role key, or cron trigger
-    // Cron is allowed because this function only INSERTs pending suggestions (non-destructive)
     const adminPassword = req.headers.get("x-admin-password");
     const cronHeader = req.headers.get("x-cron");
     const authHeader = req.headers.get("authorization") || "";
@@ -154,7 +174,6 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get active sources
     const { data: sources, error: sourcesError } = await supabase
       .from("sources")
       .select("*")
@@ -168,143 +187,137 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Collect ALL existing URLs + titles once for dedup
+    const { data: existingRows } = await supabase
+      .from("content_suggestions")
+      .select("source_url, original_title")
+      .not("source_url", "is", null);
+
+    const urlSet = new Set<string>();
+    const titleList: string[] = [];
+    for (const row of (existingRows || [])) {
+      if (row.source_url) {
+        urlSet.add(row.source_url);
+        urlSet.add(normalizeUrl(row.source_url));
+      }
+      if (row.original_title && row.original_title.length > 10) {
+        titleList.push(row.original_title.toLowerCase().trim());
+      }
+    }
+
+    const isNewUrl = (url: string): boolean => {
+      const normalized = normalizeUrl(url);
+      return !urlSet.has(url) && !urlSet.has(normalized);
+    };
+
+    const markSeen = (url: string, title: string) => {
+      urlSet.add(url);
+      urlSet.add(normalizeUrl(url));
+      if (title && title.length > 10) titleList.push(title.toLowerCase().trim());
+    };
+
     let fetchedCount = 0;
     const errors: string[] = [];
 
-    // Separate Twitter and website sources
     const twitterSources = sources.filter((s) => s.type === "twitter");
     const websiteSources = sources.filter((s) => s.type !== "twitter");
 
-    // --- Handle Twitter sources via API ---
+    // --- Twitter sources ---
     if (twitterSources.length > 0 && TWITTER_BEARER_TOKEN) {
       try {
         const usernames = twitterSources
           .map((s) => extractTwitterUsername(s.url))
           .filter(Boolean) as string[];
-
-        console.log(`Fetching tweets for ${usernames.length} users: ${usernames.join(", ")}`);
-
+        console.log(`Fetching tweets for ${usernames.length} users`);
         const tweets = await fetchTweetsForUsers(usernames, TWITTER_BEARER_TOKEN);
         console.log(`Got ${tweets.length} tweets`);
 
         for (const tweet of tweets) {
-          // Find the matching source
           const source = twitterSources.find((s) => {
             const u = extractTwitterUsername(s.url);
             return u?.toLowerCase() === tweet.username.toLowerCase();
           });
-
           if (!source) continue;
+          if (isPromotionalContent(tweet.text)) continue;
+          if (!isNewUrl(tweet.url)) continue;
 
-          // Pre-filter: skip obvious promotional/spam tweets
-          if (isPromotionalContent(tweet.text)) {
-            console.log(`Skipping promotional tweet from @${tweet.username}: ${tweet.text.substring(0, 60)}...`);
+          const title = buildTweetTitle(tweet.username, tweet.text);
+          if (isSimilarToAny(title, titleList)) {
+            console.log(`Dedup tweet: "${title.substring(0, 50)}"`);
             continue;
           }
-
-          // Check if we already have this tweet (by source_url)
-          const { data: existing } = await supabase
-            .from("content_suggestions")
-            .select("id")
-            .eq("source_url", tweet.url)
-            .maybeSingle();
-
-          if (existing) continue; // Skip duplicates
 
           const { error: insertError } = await supabase
             .from("content_suggestions")
             .insert({
               source_id: source.id,
               source_url: tweet.url,
-              original_title: buildTweetTitle(tweet.username, tweet.text),
+              original_title: title,
               original_content: tweet.text,
               status: "pending",
             });
 
-          if (insertError) {
-            console.error(`Insert error for tweet ${tweet.id}:`, insertError);
-            errors.push(`Tweet ${tweet.id}: DB insert failed`);
-          } else {
+          if (!insertError) {
             fetchedCount++;
+            markSeen(tweet.url, title);
           }
         }
       } catch (err) {
         console.error("Twitter fetch error:", err);
         errors.push(`Twitter: ${err instanceof Error ? err.message : "Unknown error"}`);
       }
-    } else if (twitterSources.length > 0 && !TWITTER_BEARER_TOKEN) {
-      errors.push("Twitter: TWITTER_BEARER_TOKEN not configured, skipping Twitter sources");
     }
 
-    // --- Handle website sources via Firecrawl ---
+    // --- Website sources via Firecrawl ---
     if (websiteSources.length > 0 && FIRECRAWL_API_KEY) {
       for (const source of websiteSources) {
         try {
           console.log(`Fetching from: ${source.name} (${source.url})`);
-
-          // Step 1: Scrape the blog/news index page to find article links
           const indexResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
             method: "POST",
             headers: {
               Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-              url: source.url,
-              formats: ["links"],
-              onlyMainContent: true,
-            }),
+            body: JSON.stringify({ url: source.url, formats: ["links"], onlyMainContent: true }),
           });
 
           const indexData = await indexResponse.json();
           if (!indexResponse.ok || !indexData.success) {
-            console.error(`Firecrawl index error for ${source.url}:`, indexData);
             errors.push(`${source.name}: ${indexData.error || "Index scrape failed"}`);
             continue;
           }
 
-          // Step 2: Extract article links from the page
           const allLinks: string[] = indexData.data?.links || [];
           const baseUrl = new URL(source.url);
           const baseDomain = baseUrl.hostname;
 
-          // Filter for article-like links (same domain, path looks like a blog post)
           const articleLinks = allLinks.filter((link: string) => {
             try {
               const u = new URL(link);
-              // Must be same domain
               if (u.hostname !== baseDomain && !u.hostname.endsWith(`.${baseDomain}`)) return false;
-              // Skip obvious non-article patterns
               const path = u.pathname.toLowerCase();
               if (path === "/" || path === source.url.replace(`https://${baseDomain}`, "")) return false;
               if (path.includes("/careers") || path.includes("/pricing") || path.includes("/about") ||
                   path.includes("/contact") || path.includes("/login") || path.includes("/signup") ||
                   path.includes("/terms") || path.includes("/privacy") || path.includes("/legal") ||
                   path.includes("/docs/") || path.includes("/api/")) return false;
-              // Should have enough path depth (not just /blog but /blog/article-name)
               const segments = path.split("/").filter(Boolean);
               if (segments.length < 2) return false;
               return true;
-            } catch {
-              return false;
-            }
+            } catch { return false; }
           });
 
-          // Take only the first 3 most recent articles (they appear first on blog pages)
           const topArticles = articleLinks.slice(0, 3);
           console.log(`Found ${articleLinks.length} article links from ${source.name}, processing top ${topArticles.length}`);
 
           if (topArticles.length === 0) {
-            console.log(`No article links found for ${source.name}, falling back to search`);
-            // Fallback: use Firecrawl search to find recent articles from this domain
+            // Fallback: Firecrawl search
             try {
               const domain = new URL(source.url).hostname;
               const searchResponse = await fetch("https://api.firecrawl.dev/v1/search", {
                 method: "POST",
-                headers: {
-                  Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-                  "Content-Type": "application/json",
-                },
+                headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
                 body: JSON.stringify({
                   query: `site:${domain} AI news announcement`,
                   limit: 3,
@@ -315,16 +328,17 @@ Deno.serve(async (req) => {
               if (searchResponse.ok && searchData.success && searchData.data) {
                 for (const result of searchData.data) {
                   if (!result.url) continue;
-                  const { data: existing } = await supabase.from("content_suggestions").select("id").eq("source_url", result.url).maybeSingle();
-                  if (existing) continue;
+                  const normalizedUrl = normalizeUrl(result.url);
+                  if (!isNewUrl(result.url)) continue;
                   const title = result.title || source.name;
+                  if (isSimilarToAny(title, titleList)) continue;
                   const content = result.markdown || result.description || "";
                   if (content.length > 100) {
                     const { error: insertError } = await supabase.from("content_suggestions").insert({
-                      source_id: source.id, source_url: result.url,
+                      source_id: source.id, source_url: normalizedUrl,
                       original_title: title.substring(0, 500), original_content: content.substring(0, 10000), status: "pending",
                     });
-                    if (!insertError) { fetchedCount++; console.log(`✅ Search fallback: ${title.substring(0, 60)}`); }
+                    if (!insertError) { fetchedCount++; markSeen(normalizedUrl, title); }
                   }
                 }
               }
@@ -334,63 +348,49 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          // Step 3: Check which articles we already have and scrape new ones
           for (const articleUrl of topArticles) {
-            // Dedup check for this specific article URL
-            const { data: existingArticle } = await supabase
-              .from("content_suggestions")
-              .select("id")
-              .eq("source_url", articleUrl)
-              .maybeSingle();
-
-            if (existingArticle) {
+            const normalizedUrl = normalizeUrl(articleUrl);
+            if (!isNewUrl(articleUrl)) {
               console.log(`Skipping already fetched: ${articleUrl}`);
               continue;
             }
 
-            // Scrape the individual article
             try {
               const articleResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
                 method: "POST",
-                headers: {
-                  Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  url: articleUrl,
-                  formats: ["markdown"],
-                  onlyMainContent: true,
-                }),
+                headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ url: articleUrl, formats: ["markdown"], onlyMainContent: true }),
               });
 
               const articleData = await articleResponse.json();
-              if (!articleResponse.ok || !articleData.success) {
-                console.error(`Firecrawl article error for ${articleUrl}:`, articleData);
-                continue;
-              }
+              if (!articleResponse.ok || !articleData.success) continue;
 
               const scrapedContent = articleData.data || articleData;
               const title = scrapedContent.metadata?.title || source.name;
               const content = scrapedContent.markdown || "";
 
-              if (content.length > 100) {
-                const { error: insertError } = await supabase
-                  .from("content_suggestions")
-                  .insert({
-                    source_id: source.id,
-                    source_url: articleUrl,
-                    original_title: title.substring(0, 500),
-                    original_content: content.substring(0, 10000),
-                    status: "pending",
-                  });
+              if (content.length < 100) continue;
 
-                if (insertError) {
-                  console.error(`Insert error for ${articleUrl}:`, insertError);
-                  errors.push(`${source.name}: DB insert failed for ${articleUrl}`);
-                } else {
-                  fetchedCount++;
-                  console.log(`✅ Fetched article: ${title.substring(0, 60)}`);
-                }
+              // Semantic dedup on title
+              if (isSimilarToAny(title, titleList)) {
+                console.log(`Dedup article: "${title.substring(0, 50)}"`);
+                continue;
+              }
+
+              const { error: insertError } = await supabase
+                .from("content_suggestions")
+                .insert({
+                  source_id: source.id,
+                  source_url: normalizedUrl,
+                  original_title: title.substring(0, 500),
+                  original_content: content.substring(0, 10000),
+                  status: "pending",
+                });
+
+              if (!insertError) {
+                fetchedCount++;
+                markSeen(normalizedUrl, title);
+                console.log(`✅ Fetched article: ${title.substring(0, 60)}`);
               }
             } catch (articleErr) {
               console.error(`Error scraping article ${articleUrl}:`, articleErr);
@@ -401,8 +401,6 @@ Deno.serve(async (req) => {
           errors.push(`${source.name}: ${err instanceof Error ? err.message : "Unknown error"}`);
         }
       }
-    } else if (websiteSources.length > 0 && !FIRECRAWL_API_KEY) {
-      errors.push("Firecrawl: FIRECRAWL_API_KEY not configured, skipping website sources");
     }
 
     return new Response(
@@ -410,8 +408,6 @@ Deno.serve(async (req) => {
         message: `Fetched content from ${fetchedCount} sources`,
         fetched: fetchedCount,
         total: sources.length,
-        twitterFetched: twitterSources.length,
-        websiteFetched: websiteSources.length,
         errors: errors.length > 0 ? errors : undefined,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

@@ -18,7 +18,6 @@ const SECTION_DESCRIPTIONS = {
 function isFinanceTitle(title: string): boolean {
   if (!title) return false;
   
-  // Protect product launches — these words indicate tech news, not finance
   const productLaunchPatterns = [
     /\b(משיקה?|השקה|launch|introducing|release|announce|חדש|new|update|שדרוג)\b/i,
     /\b(מודל|model|גרסה|version|אפליקציה|app|פיצ'ר|feature|כלי|tool)\b/i,
@@ -39,7 +38,7 @@ function isFinanceTitle(title: string): boolean {
   return patterns.some(p => p.test(title));
 }
 
-// Primary sources that should get extra protection from false rejections
+// Primary sources
 const PRIMARY_DOMAINS = [
   "openai.com", "anthropic.com", "deepmind.google", "blog.google",
   "ai.meta.com", "huggingface.co", "stability.ai", "midjourney.com",
@@ -55,7 +54,6 @@ function isPrimarySourceUrl(url: string): boolean {
   } catch { return false; }
 }
 
-// Detect homepage/index URLs that shouldn't be processed
 function isHomepageUrl(url: string): boolean {
   if (!url) return false;
   try {
@@ -71,11 +69,49 @@ function isHomepageUrl(url: string): boolean {
 }
 
 // ============================================================
+// Semantic Dedup Engine — prevents same-topic duplicates
+// ============================================================
+
+const STOP_WORDS = new Set([
+  "the", "a", "an", "is", "are", "was", "were", "for", "to", "of", "in", "on",
+  "at", "by", "with", "and", "or", "its", "it", "that", "this", "as", "new",
+  "has", "have", "had", "can", "could", "will", "would", "may", "now", "also",
+  "about", "from", "how", "what", "when", "where", "who", "which", "more",
+  "most", "than", "into", "over", "up", "out", "just", "been", "being",
+  "between", "after", "before", "says", "said",
+  "של", "את", "על", "עם", "לא", "גם", "או", "כי", "אם", "מה", "זה", "היא",
+  "הוא", "אל", "כל", "עוד", "יותר", "בין", "אחרי", "לפני",
+]);
+
+function extractKeyTerms(title: string): string[] {
+  const cleaned = title.toLowerCase()
+    .replace(/[⭐\[\](){}:;,."'!?—–\-\/\\]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.split(" ").filter(w => w.length > 2 && !STOP_WORDS.has(w));
+}
+
+function isSimilarToAny(newTitle: string, existingTitles: string[]): string | null {
+  const newTerms = extractKeyTerms(newTitle);
+  if (newTerms.length < 2) return null;
+
+  for (const existing of existingTitles) {
+    const existingTerms = extractKeyTerms(existing);
+    if (existingTerms.length < 2) continue;
+
+    const overlap = newTerms.filter(t => existingTerms.includes(t)).length;
+    const similarity = overlap / Math.min(newTerms.length, existingTerms.length);
+
+    // Require 60% similarity with at least 3 overlapping terms
+    if (similarity >= 0.6 && overlap >= 3) {
+      return existing;
+    }
+  }
+  return null;
+}
+
+// ============================================================
 // Super-Mentor AI Refinement Pipeline — 3-Persona System
-// Uses Lovable AI (Gemini) to refine content through expert lenses:
-// 1. Marty Cagan — Product value & ROI
-// 2. W. Chan Kim — Blue Ocean / market friction elimination
-// 3. Paul Graham — Startup signal detection
 // ============================================================
 
 async function refineWithSuperMentor(
@@ -148,13 +184,8 @@ ${content}
     if (!response.ok) {
       const errText = await response.text();
       console.error(`Refinement API error: ${response.status}`, errText);
-      
-      if (response.status === 429) {
-        console.warn("Rate limited on refinement — skipping refinement pass");
-        return null;
-      }
-      if (response.status === 402) {
-        console.warn("Payment required for refinement — skipping refinement pass");
+      if (response.status === 429 || response.status === 402) {
+        console.warn("Rate/payment limited on refinement — skipping");
         return null;
       }
       return null;
@@ -163,7 +194,6 @@ ${content}
     const aiResponse = await response.json();
     const rawContent = aiResponse.choices?.[0]?.message?.content || "";
 
-    // Parse JSON from response
     const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       console.error("Refinement: No JSON found in response");
@@ -177,14 +207,11 @@ ${content}
       return null;
     }
 
-    // Compose the final enriched content with Super-Mentor structure
     const enrichedContent = `**PREMIUM HOOK**\n${refined.hook}\n\n${refined.content}\n\n**THE 1% CASE**\n${refined.justification || ""}\n\n**CURATOR'S VERDICT**\n> ${refined.verdict}`;
-
-    // Use the hook as the excerpt (it's more compelling)
     const enrichedExcerpt = refined.hook;
 
     return {
-      title, // Keep original title
+      title,
       excerpt: enrichedExcerpt,
       content: enrichedContent,
     };
@@ -202,7 +229,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Validate admin password
     const adminPassword = req.headers.get("x-admin-password");
     const expectedPassword = Deno.env.get("ADMIN_PASSWORD");
     if (!adminPassword || adminPassword !== expectedPassword) {
@@ -226,7 +252,7 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get unprocessed suggestions (have original content but no suggested content)
+    // Get unprocessed suggestions
     const { data: suggestions, error: fetchError } = await supabase
       .from("content_suggestions")
       .select("*")
@@ -242,6 +268,34 @@ Deno.serve(async (req) => {
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // ============================================================
+    // SEMANTIC DEDUP: Load existing titles for duplicate detection
+    // ============================================================
+    const { data: existingItems } = await supabase
+      .from("content_suggestions")
+      .select("suggested_title, original_title")
+      .not("suggested_title", "is", null)
+      .in("status", ["pending", "approved"])
+      .order("fetched_at", { ascending: false })
+      .limit(500);
+
+    const existingTitles = (existingItems || [])
+      .map((r: any) => (r.suggested_title || r.original_title || "").toLowerCase().trim())
+      .filter((t: string) => t.length > 10 && !t.startsWith("[נדחה"));
+
+    // Also check published_posts titles for cross-table dedup
+    const { data: publishedPosts } = await supabase
+      .from("published_posts")
+      .select("title")
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    const publishedTitles = (publishedPosts || [])
+      .map((r: any) => (r.title || "").toLowerCase().trim())
+      .filter((t: string) => t.length > 10);
+
+    const allExistingTitles = [...existingTitles, ...publishedTitles];
 
     // Get active topics for context
     const { data: topics } = await supabase
@@ -259,11 +313,12 @@ Deno.serve(async (req) => {
 
     let processedCount = 0;
     let refinedCount = 0;
+    let dedupedCount = 0;
     const errors: string[] = [];
 
     for (const suggestion of suggestions) {
       try {
-        // Pre-check: reject homepage/index URLs before wasting AI calls
+        // Pre-check: reject homepage/index URLs
         if (isHomepageUrl(suggestion.source_url || "")) {
           console.log(`Rejecting homepage URL: ${suggestion.source_url}`);
           await supabase
@@ -275,6 +330,24 @@ Deno.serve(async (req) => {
             })
             .eq("id", suggestion.id);
           processedCount++;
+          continue;
+        }
+
+        // Pre-check: semantic dedup on ORIGINAL title before wasting AI call
+        const originalTitle = suggestion.original_title || "";
+        const similarOriginal = isSimilarToAny(originalTitle, allExistingTitles);
+        if (similarOriginal) {
+          console.log(`Dedup (pre-AI): "${originalTitle.substring(0, 50)}" ≈ "${similarOriginal.substring(0, 50)}"`);
+          await supabase
+            .from("content_suggestions")
+            .update({
+              status: "rejected",
+              suggested_title: "[נדחה אוטומטית] כפילות סמנטית — נושא דומה כבר קיים",
+              reviewed_at: new Date().toISOString(),
+            })
+            .eq("id", suggestion.id);
+          processedCount++;
+          dedupedCount++;
           continue;
         }
 
@@ -358,7 +431,6 @@ ${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n"
         const aiResponse = await response.json();
         const rawContent = aiResponse.choices?.[0]?.message?.content || "";
 
-        // Extract JSON from response
         let parsed: any;
         try {
           const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
@@ -373,10 +445,10 @@ ${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n"
           continue;
         }
 
-        // Check if AI rejected this content as promotional/generic
+        // Check if AI rejected this content
         if (parsed.reject === true) {
           console.log(`AI rejected ${suggestion.id}: ${parsed.reject_reason || "promotional/generic"}`);
-          const { error: rejectError } = await supabase
+          await supabase
             .from("content_suggestions")
             .update({
               status: "rejected",
@@ -384,18 +456,14 @@ ${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n"
               reviewed_at: new Date().toISOString(),
             })
             .eq("id", suggestion.id);
-          if (rejectError) {
-            console.error(`Reject update error for ${suggestion.id}:`, rejectError);
-          } else {
-            processedCount++;
-          }
+          processedCount++;
           continue;
         }
 
-        // Post-filter: reject if AI generated a finance/economics title
+        // Post-filter: reject finance titles
         const suggestedTitle = parsed.title || "";
         if (isFinanceTitle(suggestedTitle)) {
-          console.log(`AI post-filter rejected ${suggestion.id}: finance title "${suggestedTitle.substring(0, 60)}"`);
+          console.log(`Post-filter rejected ${suggestion.id}: finance title "${suggestedTitle.substring(0, 60)}"`);
           await supabase
             .from("content_suggestions")
             .update({
@@ -408,12 +476,31 @@ ${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n"
           continue;
         }
 
+        // ============================================================
+        // POST-AI SEMANTIC DEDUP: Check if AI-generated title is similar
+        // to an existing title (catches same topic from different sources)
+        // ============================================================
+        const similarExisting = isSimilarToAny(suggestedTitle, allExistingTitles);
+        if (similarExisting) {
+          console.log(`Dedup (post-AI): "${suggestedTitle.substring(0, 50)}" ≈ "${similarExisting.substring(0, 50)}"`);
+          await supabase
+            .from("content_suggestions")
+            .update({
+              status: "rejected",
+              suggested_title: "[נדחה אוטומטית] כפילות סמנטית — נושא דומה כבר קיים",
+              reviewed_at: new Date().toISOString(),
+            })
+            .eq("id", suggestion.id);
+          processedCount++;
+          dedupedCount++;
+          continue;
+        }
+
         // Validate section
         const section = SECTIONS.includes(parsed.section) ? parsed.section : "weekly";
 
         // ============================================================
-        // STAGE 2: Super-Mentor Refinement Pipeline (3-Persona System)
-        // Refines approved content through Cagan/Kim/Graham lenses
+        // STAGE 2: Super-Mentor Refinement Pipeline
         // ============================================================
         let finalTitle = parsed.title || suggestion.original_title;
         let finalExcerpt = parsed.excerpt || "";
@@ -441,7 +528,7 @@ ${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n"
           }
         }
 
-        // Update the suggestion with processed (and potentially refined) content
+        // Update the suggestion with processed content
         const { error: updateError } = await supabase
           .from("content_suggestions")
           .update({
@@ -458,6 +545,8 @@ ${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n"
           errors.push(`${suggestion.id}: DB update failed`);
         } else {
           processedCount++;
+          // Add to existing titles so next items in this batch are checked too
+          allExistingTitles.push(finalTitle.toLowerCase().trim());
         }
       } catch (err) {
         console.error(`Error processing ${suggestion.id}:`, err);
@@ -467,9 +556,10 @@ ${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n"
 
     return new Response(
       JSON.stringify({
-        message: `Processed ${processedCount} suggestions (${refinedCount} refined by Super-Mentor)`,
+        message: `Processed ${processedCount} suggestions (${refinedCount} refined, ${dedupedCount} deduped)`,
         processed: processedCount,
         refined: refinedCount,
+        deduped: dedupedCount,
         total: suggestions.length,
         errors: errors.length > 0 ? errors : undefined,
       }),
