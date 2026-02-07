@@ -17,6 +17,15 @@ const SECTION_DESCRIPTIONS = {
 // Post-processing filter: reject AI-generated titles about finance/economics
 function isFinanceTitle(title: string): boolean {
   if (!title) return false;
+  
+  // Protect product launches — these words indicate tech news, not finance
+  const productLaunchPatterns = [
+    /\b(משיקה?|השקה|launch|introducing|release|announce|חדש|new|update|שדרוג)\b/i,
+    /\b(מודל|model|גרסה|version|אפליקציה|app|פיצ'ר|feature|כלי|tool)\b/i,
+  ];
+  const looksLikeProductLaunch = productLaunchPatterns.every(p => p.test(title));
+  if (looksLikeProductLaunch) return false;
+  
   const patterns = [
     /מיליארד\s*דולר/,
     /מיליון\s*דולר/,
@@ -28,6 +37,22 @@ function isFinanceTitle(title: string): boolean {
     /תוצאות\s*(חזקות|חלשות)\s*ברבעון/,
   ];
   return patterns.some(p => p.test(title));
+}
+
+// Primary sources that should get extra protection from false rejections
+const PRIMARY_DOMAINS = [
+  "openai.com", "anthropic.com", "deepmind.google", "blog.google",
+  "ai.meta.com", "huggingface.co", "stability.ai", "midjourney.com",
+  "nvidia.com", "microsoft.com", "apple.com", "x.ai", "mistral.ai",
+  "perplexity.ai", "cohere.com", "runwayml.com",
+];
+
+function isPrimarySourceUrl(url: string): boolean {
+  if (!url) return false;
+  try {
+    const hostname = new URL(url).hostname;
+    return PRIMARY_DOMAINS.some(d => hostname === d || hostname.endsWith(`.${d}`));
+  } catch { return false; }
 }
 
 // Detect homepage/index URLs that shouldn't be processed
@@ -124,8 +149,13 @@ Deno.serve(async (req) => {
           continue;
         }
 
+        const isPrimary = isPrimarySourceUrl(suggestion.source_url || "");
+        const primaryNote = isPrimary 
+          ? `\n⚠️ שים לב: תוכן זה מגיע ממקור ראשי (${suggestion.source_url}). מקורות ראשיים כמו OpenAI, Anthropic, Google DeepMind וכו' מפרסמים תוכן איכותי. אל תדחה אותם כ"תוכן שיווקי" או "כתבה כלכלית" אלא אם הם באמת עוסקים בנתונים פיננסיים (מניות, גיוסי הון, שווי שוק). השקת מוצר חדש היא לא כתבה כלכלית!\n`
+          : "";
+          
         const prompt = `אתה עורך תוכן מקצועי לאתר חדשות AI בעברית המיועד ל-power users ומפתחים.
-
+${primaryNote}
 הסגנון שלך:
 - תמציתי ומקצועי, לא שיווקי ולא מכירתי
 - לא העתק-הדבק מהמקור — שכתוב במילים שלך
@@ -134,15 +164,19 @@ Deno.serve(async (req) => {
 - עברית טבעית ורהוטה
 
 סינון חובה — דחה את התוכן (reject: true) אם הוא:
-- תוכן שיווקי, קידום עצמי, או מכירת מוצר/שירות (כולל "X tools for $Y/mo", "limited time offer", וכו')
+- תוכן שיווקי, קידום עצמי, או מכירת מוצר/שירות (כמו "X tools for $Y/mo", "limited time offer"). חשוב: הודעה רשמית מחברת AI על מוצר חדש שלה היא לא תוכן שיווקי — זו חדשות!
 - מדריך גנרי למתחילים (כמו "how to write prompts", "10 AI tips for beginners")
 - תוכן שיווקי מוסווה כתוכן ערך (self-promotion של הפרופיל שפרסם)
 - תוכן ריק מתוכן (רק קישורים, רק אימוג'ים, או שרשור קידומי)
 - פילוסופיה כללית על AI ללא מידע חדש קונקרטי
-- חדשות ישנות (מוצרים/פיצ'רים שהושקו לפני יותר משבוע). התאריך היום הוא ${new Date().toISOString().split("T")[0]}. אם המידע מתייחס לאירוע שקרה לפני יותר משבוע — דחה עם reject_reason "חדשות ישנות". חריג: תוכן ויראלי (שהפך פופולרי/שנוי במחלוקת) עד שבוע אחורה — מותר למדור viral
 - תוכן כללי של דף בית של חברה ללא חדשות ספציפיות (כגון "Welcome to OpenAI", "Google Labs homepage")
-- כתבות כלכליות/פיננסיות: השקעות, גיוסי הון, שווי שוק, מניות, בורסה, דוחות כספיים, הכנסות חברות. דוגמה: "גוגל משלשלת השקעות ב-AI ל-185 מיליארד דולר" — דחה עם reject_reason "כתבה כלכלית/פיננסית"
+- כתבות כלכליות/פיננסיות שעוסקות בעיקר ב: השקעות, גיוסי הון, שווי שוק, מניות, בורסה, דוחות כספיים, הכנסות חברות. חשוב: "חברה X משיקה מוצר Y" — זו לא כתבה כלכלית! כתבה כלכלית היא כזו שהמוקד שלה הוא כסף ומספרים פיננסיים.
 - חדשות על מיזוגים, רכישות, או עסקאות עסקיות (M&A) אלא אם יש בהן מידע טכנולוגי משמעותי על מוצר חדש
+
+חוק טריות — התאריך היום הוא ${new Date().toISOString().split("T")[0]}:
+- תוכן שפורסם ב-7 הימים האחרונים: מותר בכל המדורים
+- תוכן ישן יותר מ-7 ימים: דחה עם reject_reason "חדשות ישנות"
+- אם אתה לא בטוח לגבי התאריך, העדף לאשר (אל תדחה בספק)
 
 ${topicsContext}
 
@@ -156,7 +190,7 @@ ${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n"
 
 משימה:
 1. קודם כל, הצלב את התוכן עם רשימת התחומים למעלה. אם הוא לא נופל באף תחום — דחה עם reject_reason "לא רלוונטי לתחומי העניין"
-2. בדוק אם התוכן שיווקי/גנרי/ריק/ישן — אם כן, החזר {"reject": true, "reject_reason": "..."}
+2. בדוק אם התוכן שיווקי/גנרי/ריק — אם כן, החזר {"reject": true, "reject_reason": "..."}
 3. אם התוכן רלוונטי ואיכותי:
    - כתוב כותרת בעברית (קצרה, ברורה, לא שיווקית, מתארת את הנושא הספציפי)
    - כתוב תקציר של 1-2 משפטים בעברית

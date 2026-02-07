@@ -137,6 +137,53 @@ Deno.serve(async (req) => {
       urlSet.add(url.replace(/\/$/, ""));
     };
 
+    // Collect existing titles for semantic dedup
+    const { data: existingTitles } = await supabase
+      .from("content_suggestions")
+      .select("original_title, suggested_title")
+      .not("original_title", "is", null)
+      .order("fetched_at", { ascending: false })
+      .limit(200);
+
+    const titleSet = (existingTitles || []).map((r: any) => 
+      (r.suggested_title || r.original_title || "").toLowerCase().replace(/[⭐\[\]]/g, "").trim()
+    ).filter((t: string) => t.length > 10);
+
+    // Semantic dedup: extract key terms and check for similarity
+    function extractKeyTerms(title: string): string[] {
+      const cleaned = title.toLowerCase()
+        .replace(/[⭐\[\](){}:;,."'!?—–\-]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const stopWords = new Set(["the", "a", "an", "is", "are", "was", "were", "for", "to", "of", "in", "on", "at", "by", "with", "and", "or", "its", "it", "that", "this", "as", "new", "has", "have", "had", "can", "could", "will", "would", "may", "now", "also", "about", "from", "how", "what", "when", "where", "who", "which", "more", "most", "than", "into", "over", "up", "out", "just", "been", "being", "between", "after", "before", "says", "said",
+        "של", "את", "על", "עם", "לא", "גם", "או", "כי", "אם", "מה", "זה", "היא", "הוא", "אל", "כל", "עוד", "יותר", "בין", "אחרי", "לפני"]);
+      return cleaned.split(" ").filter(w => w.length > 2 && !stopWords.has(w));
+    }
+
+    function isSimilarTitle(newTitle: string): boolean {
+      const newTerms = extractKeyTerms(newTitle);
+      if (newTerms.length < 2) return false;
+      
+      for (const existing of titleSet) {
+        const existingTerms = extractKeyTerms(existing);
+        if (existingTerms.length < 2) continue;
+        
+        // Count overlapping terms
+        const overlap = newTerms.filter(t => existingTerms.includes(t)).length;
+        const similarity = overlap / Math.min(newTerms.length, existingTerms.length);
+        
+        if (similarity >= 0.6 && overlap >= 3) {
+          console.log(`  Dedup: "${newTitle.substring(0, 50)}" similar to "${existing.substring(0, 50)}" (${(similarity * 100).toFixed(0)}%)`);
+          return true;
+        }
+      }
+      return false;
+    }
+
+    const markTitleSeen = (title: string) => {
+      titleSet.push(title.toLowerCase().replace(/[⭐\[\]]/g, "").trim());
+    };
+
     let fetchedCount = 0;
     let primaryCount = 0;
     const errors: string[] = [];
@@ -210,6 +257,11 @@ Deno.serve(async (req) => {
             continue;
           }
 
+          // Semantic dedup: skip if similar title already exists
+          if (isSimilarTitle(title)) {
+            continue;
+          }
+
           const isPrimary = isPrimarySource(url);
 
           const { error: insertError } = await supabase
@@ -226,6 +278,7 @@ Deno.serve(async (req) => {
             if (isPrimary) primaryCount++;
             accepted++;
             markUrlSeen(url);
+            markTitleSeen(title);
             searchResults.push(`${isPrimary ? "⭐ " : ""}[${category}] ${title.substring(0, 60)}`);
           }
         }
