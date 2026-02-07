@@ -15,6 +15,7 @@ export default {
     extend: {
       fontFamily: {
         heebo: ["Heebo", "sans-serif"],
+        mono: ["JetBrains Mono", "monospace"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -41,6 +42,10 @@ export default {
         accent: {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
+        },
+        signal: {
+          DEFAULT: "hsl(var(--signal))",
+          foreground: "hsl(var(--signal-foreground))",
         },
         popover: {
           DEFAULT: "hsl(var(--popover))",
@@ -79,16 +84,16 @@ export default {
           from: { opacity: "0", transform: "translateY(10px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
-        "pulse-glow": {
-          "0%, 100%": { boxShadow: "0 0 20px -5px hsl(250 80% 60% / 0.3)" },
-          "50%": { boxShadow: "0 0 30px -5px hsl(250 80% 60% / 0.5)" },
+        "cursor-blink": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0" },
         },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "fade-in": "fade-in 0.5s ease-out forwards",
-        "pulse-glow": "pulse-glow 3s ease-in-out infinite",
+        "cursor-blink": "cursor-blink 1.2s step-end infinite",
       },
     },
   },

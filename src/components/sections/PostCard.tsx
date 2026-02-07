@@ -17,7 +17,7 @@ const PostCard = ({ post }: PostCardProps) => {
             {post.tag}
           </span>
           <TopicBadge tag={post.tag} />
-          <span className="text-xs text-muted-foreground">{post.date}</span>
+          <span className="text-xs text-muted-foreground font-mono">{post.date}</span>
         </div>
         <h3 className="text-lg font-bold mb-2 group-hover:text-primary transition-colors leading-snug">
           {post.title}
