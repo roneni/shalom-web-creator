@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-admin-password, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 // AI-relevance filter — only keep tweets related to AI/tech
@@ -184,30 +184,50 @@ async function filterByEditorialFit(
   return validIndices;
 }
 
+async function validateAdminAuth(req: Request): Promise<{ ok: boolean; userId: string; error?: Response }> {
+  const authHeader = req.headers.get("Authorization") || "";
+  const cronHeader = req.headers.get("x-cron");
+  const bearerToken = authHeader.replace("Bearer ", "");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  if (bearerToken === serviceRoleKey || cronHeader === "true") {
+    return { ok: true, userId: "system" };
+  }
+  if (!authHeader.startsWith("Bearer ")) {
+    return { ok: false, userId: "", error: new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }) };
+  }
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const userClient = createClient(supabaseUrl, supabaseAnonKey, { global: { headers: { Authorization: authHeader } } });
+  const { data, error } = await userClient.auth.getClaims(bearerToken);
+  if (error || !data?.claims) {
+    return { ok: false, userId: "", error: new Response(JSON.stringify({ error: "Invalid token" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }) };
+  }
+  const userId = data.claims.sub as string;
+  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+  const { data: roleData } = await adminClient.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin").single();
+  if (!roleData) {
+    return { ok: false, userId: "", error: new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }) };
+  }
+  return { ok: true, userId };
+}
+
+async function checkRateLimit(supabase: any, functionName: string, userId: string, maxCalls: number, windowMinutes: number): Promise<boolean> {
+  await supabase.from("admin_rate_limits").delete().lt("called_at", new Date(Date.now() - 60 * 60 * 1000).toISOString());
+  const windowStart = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
+  const { count } = await supabase.from("admin_rate_limits").select("*", { count: "exact", head: true }).eq("function_name", functionName).eq("user_id", userId).gte("called_at", windowStart);
+  if ((count || 0) >= maxCalls) return false;
+  await supabase.from("admin_rate_limits").insert({ function_name: functionName, user_id: userId });
+  return true;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Auth check
-    const adminPassword = req.headers.get("x-admin-password");
-    const cronHeader = req.headers.get("x-cron");
-    const authHeader = req.headers.get("authorization") || "";
-    const bearerToken = authHeader.replace("Bearer ", "");
-    const expectedPassword = Deno.env.get("ADMIN_PASSWORD");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-    const isAdmin = adminPassword && adminPassword === expectedPassword;
-    const isServiceRole = bearerToken && bearerToken === serviceRoleKey;
-    const isCron = cronHeader === "true";
-
-    if (!isAdmin && !isServiceRole && !isCron) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
+    const auth = await validateAdminAuth(req);
+    if (!auth.ok) return auth.error!;
 
     const TWITTER_CONSUMER_KEY = Deno.env.get("TWITTER_CONSUMER_KEY");
     const TWITTER_CONSUMER_SECRET = Deno.env.get("TWITTER_CONSUMER_SECRET");
@@ -225,6 +245,13 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    if (auth.userId !== "system") {
+      const allowed = await checkRateLimit(supabase, "fetch-twitter-likes", auth.userId, 10, 60);
+      if (!allowed) {
+        return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again later." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
 
     // Get existing URLs for dedup
     const { data: existingRows } = await supabase

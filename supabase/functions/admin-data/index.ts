@@ -3,8 +3,39 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-admin-password, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+async function validateAdminAuth(req: Request): Promise<{ ok: boolean; userId: string; error?: Response }> {
+  const authHeader = req.headers.get("Authorization") || "";
+  const bearerToken = authHeader.replace("Bearer ", "");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  if (bearerToken === serviceRoleKey) {
+    return { ok: true, userId: "system" };
+  }
+
+  if (!authHeader.startsWith("Bearer ")) {
+    return { ok: false, userId: "", error: new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }) };
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const userClient = createClient(supabaseUrl, supabaseAnonKey, { global: { headers: { Authorization: authHeader } } });
+  const { data, error } = await userClient.auth.getClaims(bearerToken);
+  if (error || !data?.claims) {
+    return { ok: false, userId: "", error: new Response(JSON.stringify({ error: "Invalid token" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }) };
+  }
+
+  const userId = data.claims.sub as string;
+  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+  const { data: roleData } = await adminClient.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin").single();
+  if (!roleData) {
+    return { ok: false, userId: "", error: new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }) };
+  }
+
+  return { ok: true, userId };
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -12,15 +43,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Validate admin password
-    const adminPassword = req.headers.get("x-admin-password");
-    const expectedPassword = Deno.env.get("ADMIN_PASSWORD");
-    if (!adminPassword || adminPassword !== expectedPassword) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const auth = await validateAdminAuth(req);
+    if (!auth.ok) return auth.error!;
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
