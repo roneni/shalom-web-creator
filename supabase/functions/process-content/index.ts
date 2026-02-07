@@ -272,13 +272,14 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get unprocessed suggestions
+    // Get unprocessed suggestions (skip Twitter likes — they have ❤️ prefix)
     const { data: suggestions, error: fetchError } = await supabase
       .from("content_suggestions")
       .select("*")
       .eq("status", "pending")
       .is("suggested_title", null)
       .not("original_content", "is", null)
+      .not("original_title", "like", "❤️%")
       .limit(5);
 
     if (fetchError) throw fetchError;
