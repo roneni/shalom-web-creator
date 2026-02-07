@@ -123,13 +123,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    const TWITTER_CLIENT_ID = Deno.env.get("TWITTER_CLIENT_ID");
-    const TWITTER_CLIENT_SECRET = Deno.env.get("TWITTER_CLIENT_SECRET");
+    const TWITTER_CONSUMER_KEY = Deno.env.get("TWITTER_CONSUMER_KEY");
+    const TWITTER_CONSUMER_SECRET = Deno.env.get("TWITTER_CONSUMER_SECRET");
     const TWITTER_ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN");
     const TWITTER_ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET");
     const TWITTER_USER_ID = Deno.env.get("TWITTER_USER_ID");
 
-    if (!TWITTER_CLIENT_ID || !TWITTER_CLIENT_SECRET || !TWITTER_ACCESS_TOKEN || !TWITTER_ACCESS_TOKEN_SECRET || !TWITTER_USER_ID) {
+    if (!TWITTER_CONSUMER_KEY || !TWITTER_CONSUMER_SECRET || !TWITTER_ACCESS_TOKEN || !TWITTER_ACCESS_TOKEN_SECRET || !TWITTER_USER_ID) {
       return new Response(
         JSON.stringify({ error: "Twitter credentials not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -261,96 +261,10 @@ Deno.serve(async (req) => {
       errors.push(`Likes: ${err instanceof Error ? err.message : "Unknown error"}`);
     }
 
-    // --- Fetch Bookmarks ---
-    try {
-      console.log("Fetching bookmarked tweets...");
-      const bookmarksUrl = `https://api.x.com/2/users/${TWITTER_USER_ID}/bookmarks`;
-      const bookmarksUrlWithParams = `${bookmarksUrl}?tweet.fields=created_at,author_id,text,entities&expansions=author_id&user.fields=username&max_results=20`;
-
-      const oauthHeader = await generateOAuth1Header(
-        "GET",
-        bookmarksUrl,
-        TWITTER_CLIENT_ID,
-        TWITTER_CLIENT_SECRET,
-        TWITTER_ACCESS_TOKEN,
-        TWITTER_ACCESS_TOKEN_SECRET,
-      );
-
-      const bookmarksResponse = await fetch(bookmarksUrlWithParams, {
-        headers: { Authorization: oauthHeader },
-      });
-
-      if (!bookmarksResponse.ok) {
-        const errText = await bookmarksResponse.text();
-        console.error(`Bookmarks API error (${bookmarksResponse.status}):`, errText);
-        errors.push(`Bookmarks: HTTP ${bookmarksResponse.status} - ${errText.substring(0, 200)}`);
-      } else {
-        const bookmarksData = await bookmarksResponse.json();
-        const tweets = bookmarksData.data || [];
-        console.log(`Got ${tweets.length} bookmarked tweets`);
-
-        const userMap: Record<string, string> = {};
-        if (bookmarksData.includes?.users) {
-          for (const user of bookmarksData.includes.users) {
-            userMap[user.id] = user.username;
-          }
-        }
-
-        for (const tweet of tweets) {
-          const username = userMap[tweet.author_id] || "unknown";
-          const tweetUrl = `https://x.com/${username}/status/${tweet.id}`;
-
-          if (!isNewUrl(tweetUrl)) continue;
-
-          // Pre-filter: only AI-related content
-          const tweetText = tweet.text || "";
-          if (!isAiRelated(tweetText)) {
-            console.log(`⏭️ Skipped non-AI bookmark: ${tweetText.substring(0, 60)}`);
-            skippedCount++;
-            continue;
-          }
-
-          const externalUrls: string[] = [];
-          if (tweet.entities?.urls) {
-            for (const urlEntity of tweet.entities.urls) {
-              const expanded = urlEntity.expanded_url || urlEntity.url;
-              if (expanded && !expanded.includes("x.com/") && !expanded.includes("twitter.com/")) {
-                externalUrls.push(expanded);
-              }
-            }
-          }
-
-          const text = tweet.text || "";
-          const cleanText = text.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim();
-          const title = cleanText.length > 5
-            ? `🔖 @${username}: ${cleanText.length > 100 ? cleanText.substring(0, 100) + "…" : cleanText}`
-            : `🔖 @${username} — ציוץ`;
-
-          const contentParts = [text];
-          if (externalUrls.length > 0) {
-            contentParts.push("\n\nלינקים מהציוץ:\n" + externalUrls.join("\n"));
-          }
-
-          const { error: insertError } = await supabase
-            .from("content_suggestions")
-            .insert({
-              source_url: tweetUrl,
-              original_title: title,
-              original_content: contentParts.join(""),
-              status: "pending",
-            });
-
-          if (!insertError) {
-            fetchedCount++;
-            markSeen(tweetUrl);
-            console.log(`✅ Bookmarked tweet saved: ${title.substring(0, 60)}`);
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Bookmarks fetch error:", err);
-      errors.push(`Bookmarks: ${err instanceof Error ? err.message : "Unknown error"}`);
-    }
+    // --- Bookmarks skipped ---
+    // Bookmarks endpoint requires OAuth 2.0 User Context (PKCE flow)
+    // which is not supported in this simple edge function setup.
+    // TODO: implement OAuth 2.0 PKCE flow for bookmarks support
 
     return new Response(
       JSON.stringify({
