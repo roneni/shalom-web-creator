@@ -85,6 +85,61 @@ function getDisplayTitle(suggestion: any): string {
   return suggestion.original_title || "ללא כותרת";
 }
 
+/** Extract a readable source label from joined data or URL */
+function getSourceLabel(suggestion: any): string {
+  // Use joined source name if available
+  if (suggestion.sources?.name) return suggestion.sources.name;
+  
+  // Twitter likes
+  if (suggestion.original_title?.startsWith("❤️")) return "X (לייק)";
+  
+  // Derive from source_url
+  const url = suggestion.source_url;
+  if (!url) return "מקור לא ידוע";
+  
+  try {
+    const hostname = new URL(url).hostname.replace(/^www\./, "");
+    // Map common domains to readable names
+    const domainMap: Record<string, string> = {
+      "openai.com": "OpenAI",
+      "anthropic.com": "Anthropic",
+      "deepmind.google": "DeepMind",
+      "ai.meta.com": "Meta AI",
+      "mistral.ai": "Mistral AI",
+      "huggingface.co": "Hugging Face",
+      "cohere.com": "Cohere",
+      "runwayml.com": "Runway",
+      "stability.ai": "Stability AI",
+      "x.ai": "xAI",
+      "ai.com": "ai.com",
+      "perplexity.ai": "Perplexity",
+      "groq.com": "Groq",
+      "scale.ai": "Scale AI",
+      "blogs.microsoft.com": "Microsoft",
+      "techcrunch.com": "TechCrunch",
+      "theverge.com": "The Verge",
+      "arstechnica.com": "Ars Technica",
+      "theguardian.com": "The Guardian",
+      "x.com": "X",
+      "twitter.com": "X",
+      "newatlas.com": "New Atlas",
+      "scmagazine.com": "SC Magazine",
+      "capacityglobal.com": "Capacity",
+      "red.anthropic.com": "Anthropic",
+    };
+    
+    for (const [domain, label] of Object.entries(domainMap)) {
+      if (hostname === domain || hostname.endsWith(`.${domain}`)) return label;
+    }
+    
+    // Fallback: clean domain name
+    return hostname.split(".").slice(-2, -1)[0] || hostname;
+  } catch {
+    return "מקור לא ידוע";
+  }
+}
+
+
 const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>("pending");
@@ -394,7 +449,7 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
 
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">
-                      {(suggestion as any).sources?.name || "מקור לא ידוע"} •{" "}
+                      {getSourceLabel(suggestion)} •{" "}
                       {new Date(suggestion.fetched_at).toLocaleDateString("he-IL")}
                     </span>
 
