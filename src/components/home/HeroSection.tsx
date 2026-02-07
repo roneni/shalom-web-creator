@@ -5,9 +5,14 @@ import { Button } from "@/components/ui/button";
 const HeroSection = () => {
   return (
     <section className="relative min-h-[85vh] flex items-center overflow-hidden">
-      {/* Single subtle background glow */}
-      <div className="absolute inset-0">
-        <div className="absolute top-1/3 left-1/4 w-72 h-72 bg-signal/4 rounded-full blur-[140px]" />
+      {/* Terminator red-eye ambient glow */}
+      <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+        {/* Outer diffuse red wash */}
+        <div className="absolute top-[30%] left-[12%] w-[420px] h-[420px] rounded-full bg-signal/[0.03] blur-[160px]" />
+        {/* Core eye glow — small, bright, pulsing */}
+        <div className="absolute top-[38%] left-[18%] w-20 h-20 rounded-full bg-signal/[0.12] blur-[40px] animate-eye-pulse" />
+        {/* Inner iris pinpoint */}
+        <div className="absolute top-[39.5%] left-[19%] w-6 h-6 rounded-full bg-signal/[0.25] blur-[12px] animate-eye-pulse" />
       </div>
 
       <div className="container mx-auto px-4 relative z-10">
