@@ -1,5 +1,6 @@
 import { useParams, Link } from "react-router-dom";
 import { ArrowRight, ExternalLink } from "lucide-react";
+import DOMPurify from "dompurify";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PostCard from "@/components/sections/PostCard";
@@ -7,6 +8,21 @@ import { getSectionById } from "@/data/mockData";
 import { usePostBySlug, usePostsBySection } from "@/hooks/usePosts";
 import { Skeleton } from "@/components/ui/skeleton";
 import TopicBadge from "@/components/ui/TopicBadge";
+
+// Sanitize and convert markdown-like content to safe HTML
+function sanitizeContent(text: string): string {
+  const html = text
+    .replace(/\*\*(.*?)\*\*/g, '<strong class="text-foreground font-bold">$1</strong>')
+    .replace(/\n- /g, '<br/>• ')
+    .replace(/\n/g, '<br/>');
+
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ['strong', 'br', 'em', 'a', 'ul', 'li', 'ol'],
+    ALLOWED_ATTR: ['href', 'class', 'target', 'rel'],
+    ALLOW_DATA_ATTR: false,
+    ALLOWED_URI_REGEXP: /^https?:\/\//,
+  });
+}
 
 const PostPage = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -121,7 +137,6 @@ const PostPage = () => {
               }
 
               // Hook paragraph (first content after PREMIUM HOOK) — render bold
-              // Detect by checking if it's a single long sentence without markdown headers
               const isHookParagraph = i > 0 && post.content.split("\n\n")[i - 1]?.trim() === "**PREMIUM HOOK**";
               if (isHookParagraph) {
                 return (
@@ -142,9 +157,7 @@ const PostPage = () => {
                     key={i}
                     className="bg-muted/30 border border-border rounded-lg p-4 my-4 text-sm md:text-base text-muted-foreground leading-relaxed"
                     dangerouslySetInnerHTML={{
-                      __html: trimmed
-                        .replace(/\*\*(.*?)\*\*/g, '<strong class="text-foreground font-bold">$1</strong>')
-                        .replace(/\n/g, '<br/>'),
+                      __html: sanitizeContent(trimmed),
                     }}
                   />
                 );
@@ -156,10 +169,7 @@ const PostPage = () => {
                   key={i}
                   className="text-foreground/90 leading-relaxed mb-6 text-base md:text-lg"
                   dangerouslySetInnerHTML={{
-                    __html: trimmed
-                      .replace(/\*\*(.*?)\*\*/g, '<strong class="text-foreground font-bold">$1</strong>')
-                      .replace(/\n- /g, '<br/>• ')
-                      .replace(/\n/g, '<br/>'),
+                    __html: sanitizeContent(trimmed),
                   }}
                 />
               );
@@ -192,8 +202,6 @@ const PostPage = () => {
             </Link>
           </div>
         </article>
-
-        {/* Related Posts - simplified without separate query for now */}
       </main>
       <Footer />
     </div>

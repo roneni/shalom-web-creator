@@ -158,6 +158,7 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
     queryKey: ["suggestions", statusFilter, sectionFilter],
     queryFn: () =>
       adminApi.getSuggestions(
+        password,
         statusFilter || undefined,
         sectionFilter !== "all" ? sectionFilter : undefined
       ),
@@ -259,10 +260,10 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
 
   const processedPendingIds = useMemo(
     () =>
-      new Set(
+      new Set<string>(
         pendingSuggestions
           .filter((s: any) => !!s.suggested_title && !!s.suggested_content)
-          .map((s: any) => s.id)
+          .map((s: any) => s.id as string)
       ),
     [pendingSuggestions]
   );

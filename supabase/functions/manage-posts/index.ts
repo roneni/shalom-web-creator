@@ -36,7 +36,37 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { action, suggestionId, updates } = await req.json();
+    const body = await req.json();
+    const { action, suggestionId, updates } = body;
+
+    // Input validation
+    if (typeof action !== "string" || typeof suggestionId !== "string") {
+      return new Response(
+        JSON.stringify({ error: "Invalid input types" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Reject dangerous HTML patterns in content updates
+    if (updates) {
+      const dangerousPatterns = [
+        /<script/i,
+        /javascript:/i,
+        /on\w+\s*=/i,
+        /<iframe/i,
+        /<object/i,
+        /<embed/i,
+      ];
+      const fieldsToCheck = ["content", "title", "excerpt"];
+      for (const field of fieldsToCheck) {
+        if (updates[field] && dangerousPatterns.some(p => p.test(updates[field]))) {
+          return new Response(
+            JSON.stringify({ error: "Content contains potentially dangerous HTML" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+    }
 
     if (!action || !suggestionId) {
       return new Response(
@@ -156,7 +186,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("manage-posts error:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
