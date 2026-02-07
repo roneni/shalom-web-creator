@@ -70,6 +70,132 @@ function isHomepageUrl(url: string): boolean {
   }
 }
 
+// ============================================================
+// Super-Mentor AI Refinement Pipeline — 3-Persona System
+// Uses Lovable AI (Gemini) to refine content through expert lenses:
+// 1. Marty Cagan — Product value & ROI
+// 2. W. Chan Kim — Blue Ocean / market friction elimination
+// 3. Paul Graham — Startup signal detection
+// ============================================================
+
+async function refineWithSuperMentor(
+  title: string,
+  content: string,
+  excerpt: string,
+  section: string,
+  tag: string,
+  LOVABLE_API_KEY: string
+): Promise<{ title: string; excerpt: string; content: string } | null> {
+  try {
+    const refinementPrompt = `אתה פאנל של שלושה אנליסטים ברמה עולמית בתעשיית ה-AI. כל אחד מהם מנתח את הידיעה הבאה דרך העדשה המקצועית שלו:
+
+🔬 **מרטי קייגן** (Marty Cagan — ערך מוצרי): מה הערך המוצרי האמיתי כאן? מה ה-ROI למשתמשים? האם זה פותר בעיה אמיתית או רק "פיצ'ר בשביל פיצ'ר"?
+
+🌊 **וו. צ'אן קים** (W. Chan Kim — Blue Ocean): איך הכלי/טכנולוגיה הזו מבטלת חיכוך קיים בשוק? האם זה יוצר ערך חדש שלא היה קיים? מה ה-"אוקיינוס הכחול" כאן?
+
+🚀 **פול גרהאם** (Paul Graham — YC Signal): מה הסיגנל הסטארטאפי המוקדם כאן? האם זה נראה כמו "המנצח הגדול הבא"? מה הדפוס שמזכיר הצלחות קודמות?
+
+---
+הידיעה לזיקוק:
+כותרת: ${title}
+מדור: ${section}
+תגית: ${tag}
+תקציר: ${excerpt}
+תוכן:
+${content}
+---
+
+המשימה שלך — צור גרסה מזוקקת ופרימיום של הידיעה:
+
+1. **הוק קולנועי** (PREMIUM HOOK): משפט פתיחה אחד דרמטי, ציורי, שגורם לקורא להרגיש שהוא חייב להמשיך לקרוא. לא שיווקי ולא קלישאתי — אלא חכם, מקצועי, עם נימה של סיפור. דוגמאות לסגנון:
+   - "כשכל העולם עוד מדבר על צ'אטבוטים, אנתרופיק כבר בנתה את CLI שלה מטיפוסי משגר לחדר המלחמה האוטונומי של Agent Teams."
+   - "אם עד היום הייתם 'הידיים' על המקלדת, מהיום אתם המנכ"ל."
+
+2. **תוכן מועשר** (3-5 פסקאות): שלב תובנות מכל שלושת האנליסטים באופן טבעי בתוך הטקסט. אל תכתוב "לפי מרטי קייגן..." — פשוט שלב את הזוויות בצורה אורגנית. הטון: מקצועי, ישיר, כמו שיחה בין שני מומחים. עברית טבעית ורהוטה.
+
+3. **הצדקת ה-1%** (THE 1% CASE): פסקה אחת קצרה — למה הידיעה הזו שרדה את הפילטר ומה עושה אותה לאחוז העליון של מה שקורה ב-AI עכשיו.
+
+4. **פסק דין האוצר** (CURATOR'S VERDICT): ציטוט אחד נועז ומקצועי, בגוף ראשון, שמסכם את החשיבות של הידיעה. 1-2 משפטים בלבד. דוגמה:
+   - "ההשוואה השתנתה: ה-Execution הפך לקומודיטי. אם אתם עדיין שוכרים צוותים שלמים רק כדי להעביר פיקסלים למסך, אתם משחקים את המשחק הישן."
+
+החזר JSON בלבד:
+{
+  "hook": "ההוק הקולנועי",
+  "content": "התוכן המועשר עם תובנות 3 האנליסטים",
+  "justification": "הצדקת ה-1%",
+  "verdict": "פסק דין האוצר"
+}`;
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          {
+            role: "system",
+            content: "אתה מנוע זיקוק תוכן פרימיום. אתה כותב עברית ברמה הגבוהה ביותר — טבעית, רהוטה, מקצועית, כמעט אנושית לגמרי. אתה לא משתמש בקלישאות שיווקיות. אתה תמיד מחזיר JSON תקין בלבד.",
+          },
+          { role: "user", content: refinementPrompt },
+        ],
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error(`Refinement API error: ${response.status}`, errText);
+      
+      if (response.status === 429) {
+        console.warn("Rate limited on refinement — skipping refinement pass");
+        return null;
+      }
+      if (response.status === 402) {
+        console.warn("Payment required for refinement — skipping refinement pass");
+        return null;
+      }
+      return null;
+    }
+
+    const aiResponse = await response.json();
+    const rawContent = aiResponse.choices?.[0]?.message?.content || "";
+
+    // Parse JSON from response
+    const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error("Refinement: No JSON found in response");
+      return null;
+    }
+
+    const refined = JSON.parse(jsonMatch[0]);
+
+    if (!refined.hook || !refined.content || !refined.verdict) {
+      console.error("Refinement: Missing required fields");
+      return null;
+    }
+
+    // Compose the final enriched content with Super-Mentor structure
+    const enrichedContent = `**PREMIUM HOOK**\n${refined.hook}\n\n${refined.content}\n\n**THE 1% CASE**\n${refined.justification || ""}\n\n**CURATOR'S VERDICT**\n> ${refined.verdict}`;
+
+    // Use the hook as the excerpt (it's more compelling)
+    const enrichedExcerpt = refined.hook;
+
+    return {
+      title, // Keep original title
+      excerpt: enrichedExcerpt,
+      content: enrichedContent,
+    };
+  } catch (err) {
+    console.error("Refinement error:", err);
+    return null;
+  }
+}
+
+// ============================================================
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -93,6 +219,8 @@ Deno.serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -130,6 +258,7 @@ Deno.serve(async (req) => {
       : "";
 
     let processedCount = 0;
+    let refinedCount = 0;
     const errors: string[] = [];
 
     for (const suggestion of suggestions) {
@@ -232,7 +361,6 @@ ${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n"
         // Extract JSON from response
         let parsed: any;
         try {
-          // Try to find JSON in the response
           const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             parsed = JSON.parse(jsonMatch[0]);
@@ -283,13 +411,43 @@ ${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n"
         // Validate section
         const section = SECTIONS.includes(parsed.section) ? parsed.section : "weekly";
 
-        // Update the suggestion with processed content
+        // ============================================================
+        // STAGE 2: Super-Mentor Refinement Pipeline (3-Persona System)
+        // Refines approved content through Cagan/Kim/Graham lenses
+        // ============================================================
+        let finalTitle = parsed.title || suggestion.original_title;
+        let finalExcerpt = parsed.excerpt || "";
+        let finalContent = parsed.content || "";
+
+        if (LOVABLE_API_KEY) {
+          console.log(`Refining ${suggestion.id} through Super-Mentor pipeline...`);
+          const refined = await refineWithSuperMentor(
+            finalTitle,
+            finalContent,
+            finalExcerpt,
+            section,
+            parsed.tag || "",
+            LOVABLE_API_KEY
+          );
+
+          if (refined) {
+            finalTitle = refined.title;
+            finalExcerpt = refined.excerpt;
+            finalContent = refined.content;
+            refinedCount++;
+            console.log(`✅ Refined ${suggestion.id} — Super-Mentor pipeline applied`);
+          } else {
+            console.log(`⚠️ Refinement skipped for ${suggestion.id} — using Perplexity output`);
+          }
+        }
+
+        // Update the suggestion with processed (and potentially refined) content
         const { error: updateError } = await supabase
           .from("content_suggestions")
           .update({
-            suggested_title: parsed.title || suggestion.original_title,
-            suggested_excerpt: parsed.excerpt || "",
-            suggested_content: parsed.content || "",
+            suggested_title: finalTitle,
+            suggested_excerpt: finalExcerpt,
+            suggested_content: finalContent,
             suggested_section: section,
             suggested_tag: parsed.tag || "",
           })
@@ -309,8 +467,9 @@ ${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n"
 
     return new Response(
       JSON.stringify({
-        message: `Processed ${processedCount} suggestions`,
+        message: `Processed ${processedCount} suggestions (${refinedCount} refined by Super-Mentor)`,
         processed: processedCount,
+        refined: refinedCount,
         total: suggestions.length,
         errors: errors.length > 0 ? errors : undefined,
       }),
