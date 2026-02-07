@@ -5,14 +5,37 @@ import { Button } from "@/components/ui/button";
 const HeroSection = () => {
   return (
     <section className="relative min-h-[85vh] flex items-center overflow-hidden">
-      {/* Terminator red-eye ambient glow */}
+      {/* Metallic endoskeleton ambient background */}
       <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-        {/* Outer diffuse red wash */}
-        <div className="absolute top-[30%] left-[12%] w-[420px] h-[420px] rounded-full bg-signal/[0.03] blur-[160px]" />
-        {/* Core eye glow — small, bright, pulsing */}
-        <div className="absolute top-[38%] left-[18%] w-20 h-20 rounded-full bg-signal/[0.12] blur-[40px] animate-eye-pulse" />
-        {/* Inner iris pinpoint */}
-        <div className="absolute top-[39.5%] left-[19%] w-6 h-6 rounded-full bg-signal/[0.25] blur-[12px] animate-eye-pulse" />
+        {/* Base metallic gradient — dark chrome feel */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `
+              radial-gradient(ellipse 80% 70% at 15% 40%, hsla(220, 8%, 18%, 0.7) 0%, transparent 70%),
+              radial-gradient(ellipse 50% 60% at 5% 50%, hsla(220, 6%, 14%, 0.5) 0%, transparent 60%),
+              radial-gradient(ellipse 40% 40% at 25% 35%, hsla(0, 0%, 22%, 0.3) 0%, transparent 50%)
+            `,
+          }}
+        />
+        {/* Directional light streak — like light catching chrome */}
+        <div
+          className="absolute top-[20%] left-[8%] w-[2px] h-[35%] opacity-[0.06] rotate-[8deg]"
+          style={{ background: 'linear-gradient(to bottom, transparent, hsla(220, 10%, 70%, 0.5), transparent)' }}
+        />
+        <div
+          className="absolute top-[25%] left-[12%] w-[1px] h-[25%] opacity-[0.04] rotate-[5deg]"
+          style={{ background: 'linear-gradient(to bottom, transparent, hsla(220, 10%, 60%, 0.4), transparent)' }}
+        />
+
+        {/* Red eye — outer haze */}
+        <div className="absolute top-[36%] left-[16%] w-[200px] h-[200px] rounded-full bg-signal/[0.06] blur-[80px] animate-eye-pulse" />
+        {/* Red eye — core glow */}
+        <div className="absolute top-[40%] left-[18%] w-24 h-24 rounded-full bg-signal/[0.18] blur-[35px] animate-eye-pulse" />
+        {/* Red eye — iris pinpoint */}
+        <div className="absolute top-[42%] left-[19.5%] w-8 h-8 rounded-full bg-signal/[0.35] blur-[10px] animate-eye-pulse" />
+        {/* Red eye — hot center */}
+        <div className="absolute top-[43%] left-[20%] w-3 h-3 rounded-full bg-signal/[0.5] blur-[4px] animate-eye-pulse" />
       </div>
 
       <div className="container mx-auto px-4 relative z-10">
