@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import type { Post } from "@/data/mockData";
+import TopicBadge from "@/components/ui/TopicBadge";
 
 interface PostCardProps {
   post: Post;
@@ -10,10 +11,11 @@ const PostCard = ({ post }: PostCardProps) => {
   return (
     <Link to={`/post/${post.slug}`} className="group block">
       <article className="rounded-xl bg-card border border-border hover:border-primary/30 transition-all duration-300 hover:glow-sm p-6">
-        <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-center gap-3 mb-3 flex-wrap">
           <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-primary/10 text-primary">
             {post.tag}
           </span>
+          <TopicBadge tag={post.tag} />
           <span className="text-xs text-muted-foreground">{post.date}</span>
         </div>
         <h3 className="text-lg font-bold mb-2 group-hover:text-primary transition-colors leading-snug">
