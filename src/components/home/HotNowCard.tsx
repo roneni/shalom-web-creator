@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { ArrowLeft, Flame } from "lucide-react";
+import ShareButtons from "@/components/ui/ShareButtons";
 import { useLatestPost } from "@/hooks/usePosts";
 import { Skeleton } from "@/components/ui/skeleton";
 import TopicBadge from "@/components/ui/TopicBadge";
@@ -38,9 +39,17 @@ const HotNowCard = () => {
             <p className="text-muted-foreground leading-relaxed mb-4 max-w-3xl">
               {post.excerpt}
             </p>
-            <div className="flex items-center gap-2 text-primary text-sm font-medium">
-              <span>קראו עוד</span>
-              <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-primary text-sm font-medium">
+                <span>קראו עוד</span>
+                <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
+              </div>
+              <ShareButtons
+                title={post.title}
+                excerpt={post.excerpt}
+                slug={post.slug}
+                sourceUrl={post.sourceUrl}
+              />
             </div>
           </div>
         </div>
