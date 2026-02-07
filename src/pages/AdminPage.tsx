@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RefreshCw, LogOut, Loader2, Search, TrendingUp, Cpu } from "lucide-react";
+import { RefreshCw, LogOut, Loader2, Search, TrendingUp, Cpu, Heart } from "lucide-react";
 import { useAdmin } from "@/hooks/useAdmin";
 import { adminApi } from "@/lib/adminApi";
 import { toast } from "@/hooks/use-toast";
@@ -17,6 +17,7 @@ const AdminPage = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [isTrending, setIsTrending] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isFetchingLikes, setIsFetchingLikes] = useState(false);
 
   if (!isLoggedIn) {
     return <AdminLogin onLogin={login} />;
@@ -150,6 +151,46 @@ const AdminPage = () => {
     }
   };
 
+  const handleFetchTwitterLikes = async () => {
+    setIsFetchingLikes(true);
+    try {
+      toast({ title: "❤️ שולף לייקים וסימניות מטוויטר..." });
+      const result = await adminApi.fetchTwitterLikes(password);
+      
+      if (result.fetched > 0) {
+        toast({ title: `✅ נשלפו ${result.fetched} ציוצים מלייקים וסימניות` });
+        // Auto-process
+        toast({ title: "🤖 מעבד עם AI..." });
+        const processResult = await adminApi.processOnly(password);
+        queryClient.invalidateQueries({ queryKey: ["suggestions"] });
+        if (processResult.processed > 0) {
+          toast({ title: `✅ עובדו ${processResult.processed} הצעות — מוכנות לאישור` });
+        }
+      } else {
+        toast({ title: "אין ציוצים חדשים בלייקים/סימניות" });
+      }
+
+      if (result.errors?.length) {
+        console.warn("Twitter likes errors:", result.errors);
+        toast({
+          title: "⚠️ שגיאות חלקיות",
+          description: result.errors.join(" | ").substring(0, 200),
+          variant: "destructive",
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["suggestions"] });
+    } catch (err) {
+      toast({
+        title: "שגיאת שליפת לייקים",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setIsFetchingLikes(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background" dir="rtl">
       <header className="border-b border-border">
@@ -157,8 +198,22 @@ const AdminPage = () => {
           <h1 className="text-lg font-bold">דשבורד ניהולי</h1>
           <div className="flex items-center gap-2 flex-wrap">
             <Button
+              onClick={handleFetchTwitterLikes}
+              disabled={isFetchingLikes || isFetching || isSearching || isTrending || isProcessing}
+              size="sm"
+              variant="outline"
+              className="border-pink-500/50 text-pink-600 hover:bg-pink-50"
+            >
+              {isFetchingLikes ? (
+                <Loader2 className="h-4 w-4 animate-spin ml-2" />
+              ) : (
+                <Heart className="h-4 w-4 ml-2" />
+              )}
+              לייקים
+            </Button>
+            <Button
               onClick={handleTrendingSearch}
-              disabled={isTrending || isSearching || isFetching || isProcessing}
+              disabled={isTrending || isSearching || isFetching || isProcessing || isFetchingLikes}
               size="sm"
               variant="outline"
               className="border-destructive/50 text-destructive hover:bg-destructive/10"
@@ -172,7 +227,7 @@ const AdminPage = () => {
             </Button>
             <Button
               onClick={handleSearchContent}
-              disabled={isSearching || isFetching || isTrending || isProcessing}
+              disabled={isSearching || isFetching || isTrending || isProcessing || isFetchingLikes}
               size="sm"
               variant="outline"
             >
@@ -185,7 +240,7 @@ const AdminPage = () => {
             </Button>
             <Button
               onClick={handleProcessOnly}
-              disabled={isProcessing || isFetching || isSearching || isTrending}
+              disabled={isProcessing || isFetching || isSearching || isTrending || isFetchingLikes}
               size="sm"
               variant="outline"
               className="border-primary/50 text-primary hover:bg-primary/10"
@@ -199,7 +254,7 @@ const AdminPage = () => {
             </Button>
             <Button
               onClick={handleFetchAndProcess}
-              disabled={isFetching || isSearching || isTrending || isProcessing}
+              disabled={isFetching || isSearching || isTrending || isProcessing || isFetchingLikes}
               size="sm"
             >
               {isFetching ? (
