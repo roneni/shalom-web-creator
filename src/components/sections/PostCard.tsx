@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import type { Post } from "@/data/mockData";
 import TopicBadge from "@/components/ui/TopicBadge";
+import ShareButtons from "@/components/ui/ShareButtons";
 
 interface PostCardProps {
   post: Post;
@@ -29,18 +30,26 @@ const PostCard = ({ post }: PostCardProps) => {
             <span>קראו עוד</span>
             <ArrowLeft className="h-3.5 w-3.5 group-hover:-translate-x-1 transition-transform" />
           </div>
-          {post.sourceUrl && (
-            <a
-              href={post.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <ExternalLink className="h-3 w-3" />
-              מקור
-            </a>
-          )}
+          <div className="flex items-center gap-3">
+            <ShareButtons
+              title={post.title}
+              excerpt={post.excerpt}
+              slug={post.slug}
+              sourceUrl={post.sourceUrl}
+            />
+            {post.sourceUrl && (
+              <a
+                href={post.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ExternalLink className="h-3 w-3" />
+                מקור
+              </a>
+            )}
+          </div>
         </div>
       </article>
     </Link>
