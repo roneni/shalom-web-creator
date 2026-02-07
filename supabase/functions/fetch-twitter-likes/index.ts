@@ -177,8 +177,8 @@ Deno.serve(async (req) => {
       const oauthHeader = await generateOAuth1Header(
         "GET",
         likesUrl, // Sign without query params
-        TWITTER_CLIENT_ID,
-        TWITTER_CLIENT_SECRET,
+        TWITTER_CONSUMER_KEY,
+        TWITTER_CONSUMER_SECRET,
         TWITTER_ACCESS_TOKEN,
         TWITTER_ACCESS_TOKEN_SECRET,
       );
