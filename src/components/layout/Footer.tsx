@@ -53,8 +53,8 @@ const Footer = () => {
           <p className="text-xs text-muted-foreground">
             © {new Date().getFullYear()} AI Pulse. כל הזכויות שמורות.
           </p>
-          <p className="text-xs text-muted-foreground italic">
-            העתיד לא כתוב.
+          <p className="text-xs text-muted-foreground italic font-mono">
+            The future is not set.
           </p>
         </div>
       </div>
