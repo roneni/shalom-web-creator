@@ -23,9 +23,6 @@ import { Check, X, Pencil, ExternalLink, Loader2, CheckSquare, AlertCircle } fro
 import { adminApi } from "@/lib/adminApi";
 import { toast } from "@/hooks/use-toast";
 
-interface ContentSuggestionsProps {
-  password: string;
-}
 
 const SECTION_LABELS: Record<string, string> = {
   weekly: "מה חדש השבוע",
@@ -140,7 +137,7 @@ function getSourceLabel(suggestion: any): string {
 }
 
 
-const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
+const ContentSuggestions = () => {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>("pending");
   const [sectionFilter, setSectionFilter] = useState<string>("all");
@@ -158,7 +155,6 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
     queryKey: ["suggestions", statusFilter, sectionFilter],
     queryFn: () =>
       adminApi.getSuggestions(
-        password,
         statusFilter || undefined,
         sectionFilter !== "all" ? sectionFilter : undefined
       ),
@@ -166,7 +162,7 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
 
   const approveMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates?: Record<string, string> }) =>
-      adminApi.managePosts(password, "approve", id, updates),
+      adminApi.managePosts("approve", id, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["suggestions"] });
       toast({ title: "הפוסט אושר ופורסם" });
@@ -177,7 +173,7 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
   });
 
   const rejectMutation = useMutation({
-    mutationFn: (id: string) => adminApi.managePosts(password, "reject", id),
+    mutationFn: (id: string) => adminApi.managePosts("reject", id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["suggestions"] });
       toast({ title: "ההצעה נדחתה" });
@@ -189,7 +185,7 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: Record<string, string> }) =>
-      adminApi.managePosts(password, "update", id, updates),
+      adminApi.managePosts("update", id, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["suggestions"] });
       setEditingId(null);
@@ -209,7 +205,7 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
     let failed = 0;
     for (const id of selectedIds) {
       try {
-        await adminApi.managePosts(password, "approve", id);
+        await adminApi.managePosts("approve", id);
         approved++;
       } catch {
         failed++;
@@ -230,7 +226,7 @@ const ContentSuggestions = ({ password }: ContentSuggestionsProps) => {
     let rejected = 0;
     for (const id of selectedIds) {
       try {
-        await adminApi.managePosts(password, "reject", id);
+        await adminApi.managePosts("reject", id);
         rejected++;
       } catch {
         // skip

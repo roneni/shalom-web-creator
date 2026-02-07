@@ -10,28 +10,24 @@ import { Loader2, Plus, Trash2, ExternalLink, Rss } from "lucide-react";
 import { adminApi } from "@/lib/adminApi";
 import { toast } from "@/hooks/use-toast";
 
-interface SourcesManagerProps {
-  password: string;
-}
-
 const TYPE_LABELS: Record<string, string> = {
   twitter: "X/Twitter",
   website: "אתר",
   google_alerts_rss: "Google Alerts RSS",
 };
 
-const SourcesManager = ({ password }: SourcesManagerProps) => {
+const SourcesManager = () => {
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
   const [newSource, setNewSource] = useState({ name: "", url: "", type: "website" });
 
   const { data: sources, isLoading } = useQuery({
     queryKey: ["sources"],
-    queryFn: () => adminApi.getSources(password),
+    queryFn: () => adminApi.getSources(),
   });
 
   const toggleMutation = useMutation({
-    mutationFn: (sourceId: string) => adminApi.manageSources(password, "toggle", sourceId),
+    mutationFn: (sourceId: string) => adminApi.manageSources("toggle", sourceId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sources"] });
     },
@@ -41,7 +37,7 @@ const SourcesManager = ({ password }: SourcesManagerProps) => {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (sourceId: string) => adminApi.manageSources(password, "delete", sourceId),
+    mutationFn: (sourceId: string) => adminApi.manageSources("delete", sourceId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sources"] });
       toast({ title: "המקור נמחק" });
@@ -53,7 +49,7 @@ const SourcesManager = ({ password }: SourcesManagerProps) => {
 
   const addMutation = useMutation({
     mutationFn: (source: { name: string; url: string; type: string }) =>
-      adminApi.manageSources(password, "add", undefined, source),
+      adminApi.manageSources("add", undefined, source),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sources"] });
       setNewSource({ name: "", url: "", type: "website" });
