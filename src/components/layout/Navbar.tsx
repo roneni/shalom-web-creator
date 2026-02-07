@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, Mail } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Menu, X } from "lucide-react";
+
 import { sections } from "@/data/mockData";
 
 const Navbar = () => {
@@ -47,12 +47,6 @@ const Navbar = () => {
                 {section.name}
               </Link>
             ))}
-            <Link to="/newsletter">
-              <Button size="sm" variant="ghost" className="me-2 text-muted-foreground hover:text-foreground">
-                <Mail className="h-4 w-4" />
-                ניוזלטר
-              </Button>
-            </Link>
           </div>
 
           {/* Mobile Toggle */}
@@ -84,12 +78,6 @@ const Navbar = () => {
                 {section.name}
               </Link>
             ))}
-            <Link to="/newsletter" className="mt-2">
-              <Button className="w-full gradient-bg hover:opacity-90 transition-opacity">
-                <Mail className="h-4 w-4" />
-                ניוזלטר
-              </Button>
-            </Link>
           </div>
         </div>
       )}
