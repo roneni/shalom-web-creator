@@ -6,6 +6,33 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-admin-password, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// AI-relevance filter — only keep tweets related to AI/tech
+const AI_KEYWORDS = [
+  // English
+  "ai", "artificial intelligence", "machine learning", "deep learning", "neural",
+  "llm", "gpt", "chatgpt", "openai", "anthropic", "claude", "gemini", "mistral",
+  "transformer", "diffusion", "stable diffusion", "midjourney", "dall-e", "dalle",
+  "copilot", "cursor", "replit", "langchain", "rag", "vector", "embedding",
+  "agent", "agentic", "multimodal", "foundation model", "fine-tune", "finetune",
+  "prompt", "inference", "training", "model", "benchmark", "rlhf", "alignment",
+  "generative", "text-to", "speech-to", "image generation", "video generation",
+  "hugging face", "huggingface", "runway", "sora", "kling", "suno", "udio",
+  "elevenlabs", "perplexity", "cohere", "groq", "scale ai", "sakana",
+  "meta ai", "deepmind", "xai", "grok", "character.ai",
+  "robotics", "autonomous", "computer vision", "nlp", "natural language",
+  "token", "context window", "reasoning", "chain of thought", "cot",
+  "agi", "superintelligence", "singularity",
+  "automation", "no-code", "low-code", "saas", "startup", "tech",
+  // Hebrew
+  "בינה מלאכותית", "למידת מכונה", "למידה עמוקה", "מודל שפה", "רשת נוירונית",
+  "סוכן", "סוכנים", "אוטומציה", "טכנולוגיה", "רובוט",
+];
+
+function isAiRelated(text: string): boolean {
+  const lower = text.toLowerCase();
+  return AI_KEYWORDS.some(kw => lower.includes(kw));
+}
+
 function normalizeUrl(url: string): string {
   try {
     const u = new URL(url);
@@ -138,6 +165,7 @@ Deno.serve(async (req) => {
     };
 
     let fetchedCount = 0;
+    let skippedCount = 0;
     const errors: string[] = [];
 
     // --- Fetch Likes ---
@@ -181,6 +209,14 @@ Deno.serve(async (req) => {
           const tweetUrl = `https://x.com/${username}/status/${tweet.id}`;
 
           if (!isNewUrl(tweetUrl)) continue;
+
+          // Pre-filter: only AI-related content
+          const tweetText = tweet.text || "";
+          if (!isAiRelated(tweetText)) {
+            console.log(`⏭️ Skipped non-AI like: ${tweetText.substring(0, 60)}`);
+            skippedCount++;
+            continue;
+          }
 
           // Extract any external URLs from tweet entities
           const externalUrls: string[] = [];
@@ -266,6 +302,14 @@ Deno.serve(async (req) => {
 
           if (!isNewUrl(tweetUrl)) continue;
 
+          // Pre-filter: only AI-related content
+          const tweetText = tweet.text || "";
+          if (!isAiRelated(tweetText)) {
+            console.log(`⏭️ Skipped non-AI bookmark: ${tweetText.substring(0, 60)}`);
+            skippedCount++;
+            continue;
+          }
+
           const externalUrls: string[] = [];
           if (tweet.entities?.urls) {
             for (const urlEntity of tweet.entities.urls) {
@@ -310,8 +354,9 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        message: `Fetched ${fetchedCount} tweets from likes & bookmarks`,
+        message: `Fetched ${fetchedCount} AI-related tweets (skipped ${skippedCount} non-AI)`,
         fetched: fetchedCount,
+        skipped: skippedCount,
         errors: errors.length > 0 ? errors : undefined,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
