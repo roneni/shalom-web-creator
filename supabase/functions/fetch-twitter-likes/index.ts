@@ -48,10 +48,10 @@ function normalizeUrl(url: string): string {
   }
 }
 
-// OAuth 1.0a signature for user-context endpoints (likes, bookmarks)
+// OAuth 1.0a signature for user-context endpoints (likes)
 async function generateOAuth1Header(
   method: string,
-  url: string,
+  fullUrl: string,
   consumerKey: string,
   consumerSecret: string,
   accessToken: string,
@@ -60,7 +60,11 @@ async function generateOAuth1Header(
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const nonce = crypto.randomUUID().replace(/-/g, "");
 
-  const params: Record<string, string> = {
+  // Parse URL to separate base URL and query params
+  const urlObj = new URL(fullUrl);
+  const baseUrl = `${urlObj.protocol}//${urlObj.host}${urlObj.pathname}`;
+
+  const oauthParams: Record<string, string> = {
     oauth_consumer_key: consumerKey,
     oauth_nonce: nonce,
     oauth_signature_method: "HMAC-SHA1",
@@ -69,12 +73,18 @@ async function generateOAuth1Header(
     oauth_version: "1.0",
   };
 
-  // Sort parameters and create signature base string
-  const sortedParams = Object.keys(params).sort()
-    .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`)
+  // Combine OAuth params + query params for signature
+  const allParams: Record<string, string> = { ...oauthParams };
+  urlObj.searchParams.forEach((value, key) => {
+    allParams[key] = value;
+  });
+
+  // Sort ALL parameters and create signature base string
+  const sortedParams = Object.keys(allParams).sort()
+    .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(allParams[k])}`)
     .join("&");
 
-  const signatureBase = `${method.toUpperCase()}&${encodeURIComponent(url)}&${encodeURIComponent(sortedParams)}`;
+  const signatureBase = `${method.toUpperCase()}&${encodeURIComponent(baseUrl)}&${encodeURIComponent(sortedParams)}`;
   const signingKey = `${encodeURIComponent(consumerSecret)}&${encodeURIComponent(accessTokenSecret)}`;
 
   // HMAC-SHA1
@@ -89,10 +99,10 @@ async function generateOAuth1Header(
   const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(signatureBase));
   const signatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
 
-  params.oauth_signature = signatureB64;
+  oauthParams.oauth_signature = signatureB64;
 
-  const authHeader = "OAuth " + Object.keys(params).sort()
-    .map(k => `${encodeURIComponent(k)}="${encodeURIComponent(params[k])}"`)
+  const authHeader = "OAuth " + Object.keys(oauthParams).sort()
+    .map(k => `${encodeURIComponent(k)}="${encodeURIComponent(oauthParams[k])}"`)
     .join(", ");
 
   return authHeader;
@@ -176,7 +186,7 @@ Deno.serve(async (req) => {
 
       const oauthHeader = await generateOAuth1Header(
         "GET",
-        likesUrl, // Sign without query params
+        likesUrlWithParams,
         TWITTER_CONSUMER_KEY,
         TWITTER_CONSUMER_SECRET,
         TWITTER_ACCESS_TOKEN,
