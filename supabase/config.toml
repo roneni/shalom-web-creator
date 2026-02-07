@@ -17,3 +17,9 @@ verify_jwt = false
 
 [functions.fetch-twitter-likes]
 verify_jwt = false
+
+[functions.admin-data]
+verify_jwt = false
+
+[functions.trending-search]
+verify_jwt = false

@@ -27,7 +27,7 @@ const SourcesManager = ({ password }: SourcesManagerProps) => {
 
   const { data: sources, isLoading } = useQuery({
     queryKey: ["sources"],
-    queryFn: () => adminApi.getSources(),
+    queryFn: () => adminApi.getSources(password),
   });
 
   const toggleMutation = useMutation({
