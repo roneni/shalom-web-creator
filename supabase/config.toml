@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.search-content]
 verify_jwt = false
+
+[functions.test-twitter]
+verify_jwt = false
