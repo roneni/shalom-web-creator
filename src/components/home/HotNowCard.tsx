@@ -25,13 +25,13 @@ const HotNowCard = () => {
   return (
     <section className="container mx-auto px-4 -mt-12 relative z-10">
       <Link to={`/post/${post.slug}`} className="block group">
-        <div className="relative rounded-2xl overflow-hidden gradient-border glow-md p-[1px]">
+        <div className="relative rounded-2xl overflow-hidden gradient-border p-[1px]">
           <div className="bg-card rounded-2xl p-6 md:p-10">
             <div className="flex items-center gap-2 mb-4 flex-wrap">
-              <Flame className="h-5 w-5 text-primary animate-pulse-glow" />
+              <Flame className="h-5 w-5 text-primary" />
               <span className="text-sm font-bold text-primary">הכי חם עכשיו</span>
               <TopicBadge tag={post.tag} />
-              <span className="text-xs text-muted-foreground mr-auto">{post.date}</span>
+              <span className="text-xs text-muted-foreground ms-auto">{post.date}</span>
             </div>
             <h2 className="text-2xl md:text-3xl font-bold mb-3 group-hover:text-primary transition-colors">
               {post.title}
