@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { sections } from "@/data/mockData";
 import { useLatestPostBySection } from "@/hooks/usePosts";
+import TopicBadge from "@/components/ui/TopicBadge";
 
 const SectionCardItem = ({ section, excludePostSlug }: { section: (typeof sections)[0]; excludePostSlug?: string }) => {
   const { data: latestPost } = useLatestPostBySection(section.id);
@@ -25,7 +26,10 @@ const SectionCardItem = ({ section, excludePostSlug }: { section: (typeof sectio
             to={`/post/${latestPost.slug}`}
             className="block rounded-lg bg-secondary/50 p-4 mb-4 hover:bg-secondary transition-colors"
           >
-            <p className="text-xs text-muted-foreground mb-1">{latestPost.date}</p>
+            <div className="flex items-center gap-2 mb-1">
+              <p className="text-xs text-muted-foreground">{latestPost.date}</p>
+              <TopicBadge tag={latestPost.tag} />
+            </div>
             <h4 className="font-semibold text-sm leading-snug">{latestPost.title}</h4>
           </Link>
         )}

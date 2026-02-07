@@ -6,6 +6,7 @@ import PostCard from "@/components/sections/PostCard";
 import { getSectionById } from "@/data/mockData";
 import { usePostBySlug, usePostsBySection } from "@/hooks/usePosts";
 import { Skeleton } from "@/components/ui/skeleton";
+import TopicBadge from "@/components/ui/TopicBadge";
 
 const PostPage = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -51,7 +52,7 @@ const PostPage = () => {
       <main className="pt-24 md:pt-32 pb-20">
         <article className="container mx-auto px-4 max-w-3xl">
           {/* Meta */}
-          <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center gap-3 mb-6 flex-wrap">
             <Link
               to={section?.path || "/"}
               className="text-xs font-medium px-3 py-1.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
@@ -61,6 +62,7 @@ const PostPage = () => {
             <span className="text-xs font-medium px-2.5 py-1.5 rounded-full bg-secondary text-muted-foreground">
               {post.tag}
             </span>
+            <TopicBadge tag={post.tag} />
             <span className="text-sm text-muted-foreground">{post.date}</span>
           </div>
 
