@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RefreshCw, LogOut, Loader2, Search } from "lucide-react";
+import { RefreshCw, LogOut, Loader2, Search, TrendingUp } from "lucide-react";
 import { useAdmin } from "@/hooks/useAdmin";
 import { adminApi } from "@/lib/adminApi";
 import { toast } from "@/hooks/use-toast";
@@ -15,6 +15,7 @@ const AdminPage = () => {
   const queryClient = useQueryClient();
   const [isFetching, setIsFetching] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [isTrending, setIsTrending] = useState(false);
 
   if (!isLoggedIn) {
     return <AdminLogin onLogin={login} />;
@@ -73,8 +74,6 @@ const AdminPage = () => {
     try {
       toast({ title: "🔍 מחפש חדשות AI באינטרנט..." });
       const searchResult = await adminApi.searchContent(password);
-
-      // Refresh the suggestions list
       queryClient.invalidateQueries({ queryKey: ["suggestions"] });
 
       if (searchResult.fetched > 0) {
@@ -82,16 +81,12 @@ const AdminPage = () => {
         const rejected = searchResult.fetched - approved;
         toast({
           title: `✅ נסרקו ${searchResult.fetched} פריטים`,
-          description: approved > 0 
+          description: approved > 0
             ? `${approved} הצעות חדשות מחכות לסקירה${rejected > 0 ? ` • ${rejected} נדחו ע״י AI` : ""}`
-            : `כל ${searchResult.fetched} הפריטים נדחו ע״י AI (ישנים/שיווקיים/לא רלוונטיים)`,
+            : `כל ${searchResult.fetched} הפריטים נדחו ע״י AI`,
         });
       } else {
         toast({ title: "לא נמצא תוכן חדש בחיפוש" });
-      }
-
-      if (searchResult.errors?.length) {
-        console.warn("Search errors:", searchResult.errors);
       }
     } catch (err) {
       toast({
@@ -104,6 +99,33 @@ const AdminPage = () => {
     }
   };
 
+  const handleTrendingSearch = async () => {
+    setIsTrending(true);
+    try {
+      toast({ title: "🔥 מחפש תוכן ויראלי וטרנדי..." });
+      const result = await adminApi.trendingSearch(password);
+      queryClient.invalidateQueries({ queryKey: ["suggestions"] });
+
+      if (result.fetched > 0) {
+        const approved = result.approved || 0;
+        toast({
+          title: `🔥 נמצאו ${result.fetched} פריטים טרנדיים`,
+          description: `${result.primary || 0} ממקורות ראשיים • ${approved} מחכות לסקירה`,
+        });
+      } else {
+        toast({ title: "לא נמצא תוכן טרנדי חדש" });
+      }
+    } catch (err) {
+      toast({
+        title: "שגיאת חיפוש טרנדים",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTrending(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background" dir="rtl">
       <header className="border-b border-border">
@@ -111,8 +133,22 @@ const AdminPage = () => {
           <h1 className="text-lg font-bold">דשבורד ניהולי</h1>
           <div className="flex items-center gap-3">
             <Button
+              onClick={handleTrendingSearch}
+              disabled={isTrending || isSearching || isFetching}
+              size="sm"
+              variant="outline"
+              className="border-destructive/50 text-destructive hover:bg-destructive/10"
+            >
+              {isTrending ? (
+                <Loader2 className="h-4 w-4 animate-spin ml-2" />
+              ) : (
+                <TrendingUp className="h-4 w-4 ml-2" />
+              )}
+              טרנדים
+            </Button>
+            <Button
               onClick={handleSearchContent}
-              disabled={isSearching || isFetching}
+              disabled={isSearching || isFetching || isTrending}
               size="sm"
               variant="outline"
             >
@@ -125,7 +161,7 @@ const AdminPage = () => {
             </Button>
             <Button
               onClick={handleFetchAndProcess}
-              disabled={isFetching || isSearching}
+              disabled={isFetching || isSearching || isTrending}
               size="sm"
             >
               {isFetching ? (
