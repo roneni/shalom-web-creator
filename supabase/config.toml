@@ -15,5 +15,5 @@ verify_jwt = false
 [functions.search-content]
 verify_jwt = false
 
-[functions.test-twitter]
+[functions.fetch-twitter-likes]
 verify_jwt = false
