@@ -42,6 +42,7 @@ export type Database = {
           original_content: string | null
           original_title: string | null
           reviewed_at: string | null
+          signal_score: number | null
           source_id: string | null
           source_url: string | null
           status: string
@@ -57,6 +58,7 @@ export type Database = {
           original_content?: string | null
           original_title?: string | null
           reviewed_at?: string | null
+          signal_score?: number | null
           source_id?: string | null
           source_url?: string | null
           status?: string
@@ -72,6 +74,7 @@ export type Database = {
           original_content?: string | null
           original_title?: string | null
           reviewed_at?: string | null
+          signal_score?: number | null
           source_id?: string | null
           source_url?: string | null
           status?: string
