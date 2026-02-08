@@ -3,11 +3,11 @@ import { ArrowRight, ExternalLink } from "lucide-react";
 import DOMPurify from "dompurify";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import PostCard from "@/components/sections/PostCard";
 import { getSectionById } from "@/data/mockData";
-import { usePostBySlug, usePostsBySection } from "@/hooks/usePosts";
+import { usePostBySlug } from "@/hooks/usePosts";
 import { Skeleton } from "@/components/ui/skeleton";
 import TopicBadge from "@/components/ui/TopicBadge";
+import ShareButtons from "@/components/ui/ShareButtons";
 
 // Sanitize and convert markdown-like content to safe HTML
 function sanitizeContent(text: string): string {
@@ -92,39 +92,21 @@ const PostPage = () => {
             {post.excerpt}
           </p>
 
-          {/* Content — supports Super-Mentor structured format */}
+          {/* Content */}
           <div className="prose prose-invert max-w-[42rem]">
             {post.content.split("\n\n").map((paragraph, i) => {
               const trimmed = paragraph.trim();
 
-              // Super-Mentor: PREMIUM HOOK header
-              if (trimmed === "**PREMIUM HOOK**") {
-                return (
-                  <div key={i} className="text-xs font-bold tracking-[0.2em] uppercase text-primary/60 mb-1 mt-2">
-                    PREMIUM HOOK
-                  </div>
-                );
+              // Skip internal structure headers
+              if (
+                trimmed === "**PREMIUM HOOK**" ||
+                trimmed === "**THE 1% CASE**" ||
+                trimmed === "**CURATOR'S VERDICT**"
+              ) {
+                return null;
               }
 
-              // Super-Mentor: THE 1% CASE header
-              if (trimmed === "**THE 1% CASE**") {
-                return (
-                  <div key={i} className="text-xs font-bold tracking-[0.2em] uppercase text-primary/60 mt-10 mb-1">
-                    THE 1% CASE
-                  </div>
-                );
-              }
-
-              // Super-Mentor: CURATOR'S VERDICT header
-              if (trimmed === "**CURATOR'S VERDICT**") {
-                return (
-                  <div key={i} className="text-xs font-bold tracking-[0.2em] uppercase text-primary/60 mt-10 mb-1">
-                    CURATOR&apos;S VERDICT
-                  </div>
-                );
-              }
-
-              // Super-Mentor: Verdict blockquote (starts with >)
+              // Blockquote (starts with >)
               if (trimmed.startsWith("> ")) {
                 return (
                   <blockquote
@@ -133,33 +115,6 @@ const PostPage = () => {
                   >
                     {trimmed.slice(2)}
                   </blockquote>
-                );
-              }
-
-              // Hook paragraph (first content after PREMIUM HOOK) — render bold
-              const isHookParagraph = i > 0 && post.content.split("\n\n")[i - 1]?.trim() === "**PREMIUM HOOK**";
-              if (isHookParagraph) {
-                return (
-                  <p
-                    key={i}
-                    className="text-xl md:text-2xl font-bold text-foreground leading-snug mb-8"
-                  >
-                    {trimmed}
-                  </p>
-                );
-              }
-
-              // 1% Case paragraph — slightly different styling
-              const isPrevOnePercent = i > 0 && post.content.split("\n\n")[i - 1]?.trim() === "**THE 1% CASE**";
-              if (isPrevOnePercent) {
-                return (
-                  <div
-                    key={i}
-                    className="bg-muted/30 border border-border rounded-lg p-4 my-4 text-sm md:text-base text-muted-foreground leading-relaxed"
-                    dangerouslySetInnerHTML={{
-                      __html: sanitizeContent(trimmed),
-                    }}
-                  />
                 );
               }
 
@@ -176,9 +131,15 @@ const PostPage = () => {
             })}
           </div>
 
-          {/* Source Link */}
-          {post.sourceUrl && (
-            <div className="mt-8 p-4 rounded-lg bg-muted/50 border border-border">
+          {/* Share + Source */}
+          <div className="mt-8 flex items-center gap-4 flex-wrap">
+            <ShareButtons
+              title={post.title}
+              excerpt={post.excerpt}
+              slug={post.slug}
+              sourceUrl={post.sourceUrl}
+            />
+            {post.sourceUrl && (
               <a
                 href={post.sourceUrl}
                 target="_blank"
@@ -188,8 +149,8 @@ const PostPage = () => {
                 <ExternalLink className="h-4 w-4" />
                 קראו את הכתבה המקורית
               </a>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Back to section */}
           <div className="mt-14 pt-8 border-t border-border">
