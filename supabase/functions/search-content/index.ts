@@ -513,13 +513,18 @@ Deno.serve(async (req) => {
       console.log(`=== Discovery Mode: ${discoverySubfields.length} subfields, ${discoveryEcosystem.length} ecosystem targets ===`);
       const discoveryQueries = buildDiscoveryQueries(discoverySubfields, discoveryEcosystem);
       const shuffled = discoveryQueries.sort(() => Math.random() - 0.5);
-      const selectedQueries = shuffled.slice(0, 8); // More queries for discovery
+      const selectedQueries = shuffled.slice(0, 6); // Cap at 6 to stay within timeout
 
+      // Run queries in parallel batches of 3 for speed
       const allItems: Array<{ url: string; title: string; content: string }> = [];
-      for (const query of selectedQueries) {
-        const items = await searchAndCollect(query, "Discovery");
-        allItems.push(...items);
-        await new Promise(r => setTimeout(r, 300));
+      for (let i = 0; i < selectedQueries.length; i += 3) {
+        const batch = selectedQueries.slice(i, i + 3);
+        const batchResults = await Promise.all(
+          batch.map(query => searchAndCollect(query, "Discovery"))
+        );
+        for (const items of batchResults) {
+          allItems.push(...items);
+        }
       }
 
       // AI Curator batch filter
