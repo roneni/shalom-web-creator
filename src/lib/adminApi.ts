@@ -136,6 +136,20 @@ export const adminApi = {
     return { processed: totalProcessed };
   },
 
+  async discoveryScan(subfields: string[], ecosystem: string[]) {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${FUNCTIONS_URL}/search-content`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ mode: "discovery", subfields, ecosystem }),
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || "Failed to run discovery scan");
+    }
+    return response.json();
+  },
+
   async manageSources(action: string, sourceId?: string, source?: { name: string; url: string; type: string; active?: boolean }) {
     const headers = await getAuthHeaders();
     const response = await fetch(`${FUNCTIONS_URL}/manage-sources`, {

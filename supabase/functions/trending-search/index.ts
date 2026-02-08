@@ -124,6 +124,74 @@ function buildTrendingQueries(): { query: string; category: string }[] {
   ];
 }
 
+// ============================================================
+// AI Curator — Signal Scoring for trending items
+// ============================================================
+async function aiCuratorFilter(
+  items: Array<{ url: string; title: string; content: string; isPrimary: boolean; category: string }>,
+  LOVABLE_API_KEY: string
+): Promise<Array<{ url: string; title: string; content: string; isPrimary: boolean; category: string; signal_score: number; reject: boolean; reject_reason?: string }>> {
+  if (!LOVABLE_API_KEY || items.length === 0) {
+    return items.map(item => ({ ...item, signal_score: 85, reject: false }));
+  }
+
+  const itemsList = items.map((item, i) => 
+    `[${i}] Title: ${item.title.substring(0, 200)}\nURL: ${item.url}\nCategory: ${item.category}${item.isPrimary ? " ⭐PRIMARY" : ""}\nContent: ${item.content.substring(0, 600)}`
+  ).join("\n\n---\n\n");
+
+  try {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          {
+            role: "system",
+            content: `You are 'The AI Curator' — an elite content filter for trending/viral AI content.
+Score each item 0-100 using Signal Test + Value Test.
+95-100: Paradigm shift, massive viral moment. 80-94: Significant trending update. <80: Reject.
+IMPORTANT: Items marked ⭐PRIMARY are from major AI companies — be generous with these (score 85+) unless clearly financial/marketing.
+AUTO-REJECT: marketing fluff, generic tutorials, financial speculation, old news, self-promotion.
+Return JSON array only: [{"index": 0, "score": 92, "reject": false}, {"index": 1, "score": 45, "reject": true, "reason": "marketing fluff"}]`,
+          },
+          { role: "user", content: `Evaluate these ${items.length} trending items:\n\n${itemsList}` },
+        ],
+        temperature: 0.2,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn(`AI Curator trending filter failed: ${response.status}`);
+      return items.map(item => ({ ...item, signal_score: 85, reject: false }));
+    }
+
+    const aiResponse = await response.json();
+    const rawContent = aiResponse.choices?.[0]?.message?.content || "";
+    const jsonMatch = rawContent.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      return items.map(item => ({ ...item, signal_score: 85, reject: false }));
+    }
+
+    const scores = JSON.parse(jsonMatch[0]);
+    return items.map((item, i) => {
+      const score = scores.find((s: any) => s.index === i);
+      return {
+        ...item,
+        signal_score: score?.score || 85,
+        reject: score?.reject || false,
+        reject_reason: score?.reason,
+      };
+    });
+  } catch (err) {
+    console.error("AI Curator trending filter error:", err);
+    return items.map(item => ({ ...item, signal_score: 85, reject: false }));
+  }
+}
+
 async function validateAdminAuth(req: Request): Promise<{ ok: boolean; userId: string; error?: Response }> {
   const authHeader = req.headers.get("Authorization") || "";
   const cronHeader = req.headers.get("x-cron");
@@ -177,6 +245,8 @@ Deno.serve(async (req) => {
       );
     }
 
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY") || "";
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -218,12 +288,16 @@ Deno.serve(async (req) => {
     let fetchedCount = 0;
     let primaryCount = 0;
     let dedupedCount = 0;
+    let aiRejectedCount = 0;
     const errors: string[] = [];
     const searchResults: string[] = [];
 
     const allQueries = buildTrendingQueries();
     const shuffled = allQueries.sort(() => Math.random() - 0.5);
     const selectedQueries = shuffled.slice(0, 6);
+
+    // Collect all items first, then batch-filter with AI Curator
+    const collectedItems: Array<{ url: string; title: string; content: string; isPrimary: boolean; category: string }> = [];
 
     for (const { query, category } of selectedQueries) {
       try {
@@ -263,51 +337,86 @@ Deno.serve(async (req) => {
         for (const result of sortedResults) {
           const url = result.url;
           if (!url) continue;
-
           if (/reddit\.com|twitter\.com|x\.com\/\w+\/status|youtube\.com|linkedin\.com|facebook\.com|wikipedia\.org/i.test(url)) continue;
           if (isIndexPage(url)) continue;
           if (!isNewUrl(url)) continue;
 
           const title = result.title || result.metadata?.title || "";
           const content = result.markdown || result.description || "";
-
           if (content.length < 150) continue;
           if (/^(AI News|Artificial Intelligence|Technology|Latest|Home|Blog)\s*[\|–—:]/i.test(title)) continue;
           if (isFinanceContent(title)) continue;
+          if (isSimilarToAny(title, titleList)) { dedupedCount++; continue; }
 
-          // Semantic dedup on title
-          if (isSimilarToAny(title, titleList)) {
-            console.log(`  Dedup: "${title.substring(0, 50)}"`);
-            dedupedCount++;
-            continue;
-          }
-
-          const isPrimary = isPrimarySource(url);
-          const normalizedUrl = normalizeUrl(url);
-
-          const { error: insertError } = await supabase
-            .from("content_suggestions")
-            .insert({
-              source_url: normalizedUrl,
-              original_title: `${isPrimary ? "⭐ " : ""}${title.substring(0, 500)}`,
-              original_content: content.substring(0, 10000),
-              status: "pending",
-            });
-
-          if (!insertError) {
-            fetchedCount++;
-            if (isPrimary) primaryCount++;
-            accepted++;
-            markSeen(normalizedUrl, title);
-            searchResults.push(`${isPrimary ? "⭐ " : ""}[${category}] ${title.substring(0, 60)}`);
-          }
+          collectedItems.push({
+            url: normalizeUrl(url),
+            title,
+            content: content.substring(0, 10000),
+            isPrimary: isPrimarySource(url),
+            category,
+          });
+          accepted++;
+          // Mark as seen early to prevent cross-query duplicates
+          markSeen(url, title);
         }
 
-        console.log(`  → ${results.length} results, ${accepted} accepted`);
+        console.log(`  → ${results.length} results, ${accepted} passed filters`);
         await new Promise(r => setTimeout(r, 500));
       } catch (err) {
         console.error(`Trending search error:`, err);
         errors.push(`Trending: ${err instanceof Error ? err.message : "Error"}`);
+      }
+    }
+
+    // AI Curator batch filter
+    if (collectedItems.length > 0 && LOVABLE_API_KEY) {
+      console.log(`AI Curator: evaluating ${collectedItems.length} trending items...`);
+      const evaluated = await aiCuratorFilter(collectedItems, LOVABLE_API_KEY);
+
+      for (const item of evaluated) {
+        if (item.reject) {
+          aiRejectedCount++;
+          console.log(`  ❌ Rejected (${item.signal_score}): ${item.title.substring(0, 50)} — ${item.reject_reason || "below threshold"}`);
+          await supabase.from("content_suggestions").insert({
+            source_url: item.url,
+            original_title: `${item.isPrimary ? "⭐ " : ""}${item.title.substring(0, 500)}`,
+            original_content: item.content.substring(0, 10000),
+            status: "rejected",
+            suggested_title: `[נדחה ע"י AI Curator] ${item.reject_reason || "ציון נמוך"}`,
+            signal_score: item.signal_score,
+            reviewed_at: new Date().toISOString(),
+          });
+          continue;
+        }
+
+        const { error: insertError } = await supabase.from("content_suggestions").insert({
+          source_url: item.url,
+          original_title: `${item.isPrimary ? "⭐ " : ""}${item.title.substring(0, 500)}`,
+          original_content: item.content.substring(0, 10000),
+          status: "pending",
+          signal_score: item.signal_score,
+        });
+
+        if (!insertError) {
+          fetchedCount++;
+          if (item.isPrimary) primaryCount++;
+          searchResults.push(`${item.isPrimary ? "⭐ " : ""}[${item.category}] ${item.title.substring(0, 60)}`);
+        }
+      }
+    } else {
+      // No AI key — insert all collected items
+      for (const item of collectedItems) {
+        const { error: insertError } = await supabase.from("content_suggestions").insert({
+          source_url: item.url,
+          original_title: `${item.isPrimary ? "⭐ " : ""}${item.title.substring(0, 500)}`,
+          original_content: item.content.substring(0, 10000),
+          status: "pending",
+        });
+        if (!insertError) {
+          fetchedCount++;
+          if (item.isPrimary) primaryCount++;
+          searchResults.push(`${item.isPrimary ? "⭐ " : ""}[${item.category}] ${item.title.substring(0, 60)}`);
+        }
       }
     }
 
@@ -316,7 +425,7 @@ Deno.serve(async (req) => {
     let totalProcessed = 0;
 
     if (fetchedCount > 0) {
-      console.log(`Found ${fetchedCount} trending items (${primaryCount} primary, ${dedupedCount} deduped), triggering AI processing...`);
+      console.log(`Found ${fetchedCount} trending items (${primaryCount} primary, ${dedupedCount} deduped, ${aiRejectedCount} AI-rejected), triggering AI processing...`);
       try {
         const processUrl = `${supabaseUrl}/functions/v1/process-content`;
         let hasMore = true;
@@ -350,10 +459,11 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        message: `Trending: ${fetchedCount} found (${primaryCount} primary), ${dedupedCount} deduped, ${approvedCount} approved`,
+        message: `Trending: ${fetchedCount} found (${primaryCount} primary), ${dedupedCount} deduped, ${aiRejectedCount} AI-rejected, ${approvedCount} approved`,
         fetched: fetchedCount,
         primary: primaryCount,
         deduped: dedupedCount,
+        ai_rejected: aiRejectedCount,
         processed: totalProcessed,
         approved: approvedCount,
         results: searchResults,
