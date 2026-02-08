@@ -535,6 +535,7 @@ Return valid JSON only.`;
               status: "rejected",
               suggested_title: `[נדחה אוטומטית] ${parsed.reject_reason || "תוכן שיווקי/גנרי"}`,
               reviewed_at: new Date().toISOString(),
+              signal_score: parsed.signal_score || null,
             })
             .eq("id", suggestion.id);
           processedCount++;
@@ -619,6 +620,7 @@ Return valid JSON only.`;
             suggested_content: finalContent,
             suggested_section: section,
             suggested_tag: parsed.tag || "",
+            signal_score: parsed.signal_score || null,
           })
           .eq("id", suggestion.id);
 
