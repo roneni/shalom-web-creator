@@ -143,44 +143,61 @@ async function refineWithSuperMentor(
   LOVABLE_API_KEY: string
 ): Promise<{ title: string; excerpt: string; content: string } | null> {
   try {
-    const refinementPrompt = `אתה פאנל של שלושה אנליסטים ברמה עולמית בתעשיית ה-AI. כל אחד מהם מנתח את הידיעה הבאה דרך העדשה המקצועית שלו:
+    const systemInstruction = `You are the 'Super-Mentor Curator'. You rewrite technical signals into high-level strategy.
+Act as a fusion of Marty Cagan (Product Strategy), W. Chan Kim (Blue Ocean), and Paul Graham (Startup Value).
 
-🔬 **מרטי קייגן** (Marty Cagan — ערך מוצרי): מה הערך המוצרי האמיתי כאן? מה ה-ROI למשתמשים? האם זה פותר בעיה אמיתית או רק "פיצ'ר בשביל פיצ'ר"?
+MENTAL MODELS:
+1. Marty Cagan (Product): Focus on the 'Value Test' — will users choose to use this? Does it solve a real problem or just create a feature? Focus on Product Market Fit and Friction reduction.
+2. W. Chan Kim (Blue Ocean): Focus on 'Eliminate/Create' from the ERRC framework — does this make competitors irrelevant? Does it create a new category of value?
+3. Paul Graham (YC): Focus on the 'Secret' — what non-obvious thing is happening here? Is there a technical 'unfair advantage'? Look for the 'Signal' in the noise.
 
-🌊 **וו. צ'אן קים** (W. Chan Kim — Blue Ocean): איך הכלי/טכנולוגיה הזו מבטלת חיכוך קיים בשוק? האם זה יוצר ערך חדש שלא היה קיים? מה ה-"אוקיינוס הכחול" כאן?
+WRITING STYLE (HEBREW):
+- Tone: Minimalist, elite, cold but visionary. No marketing superlatives or "excited" language.
+- Language: Professional High-Tech Hebrew. Mix English terms naturally (e.g., Inference, RAG, Zero-shot, Latency, Action Engine, SaaS).
+- Write like a conversation between two senior experts — direct, authoritative, zero fluff.
 
-🚀 **פול גרהאם** (Paul Graham — YC Signal): מה הסיגנל הסטארטאפי המוקדם כאן? האם זה נראה כמו "המנצח הגדול הבא"? מה הדפוס שמזכיר הצלחות קודמות?
+OUTPUT FORMAT — produce these 4 elements:
+1. PREMIUM HOOK: One dramatic opening sentence. Not marketing, not cliché — smart, professional, with a storytelling edge. Like a movie tagline for tech.
+2. ENRICHED CONTENT (3-5 paragraphs): Blend insights from all three analysts organically. Don't write "according to Cagan..." — weave the perspectives naturally.
+3. THE 1% CASE: One short paragraph — why this survived the filter and what makes it top 1%.
+4. CURATOR'S VERDICT: One bold, opinionated first-person quote. 1-2 sentences max.
 
----
-הידיעה לזיקוק:
-כותרת: ${title}
-מדור: ${section}
-תגית: ${tag}
-תקציר: ${excerpt}
-תוכן:
-${content}
----
+FEW-SHOT EXAMPLES:
 
-המשימה שלך — צור גרסה מזוקקת ופרימיום של הידיעה:
-
-1. **הוק קולנועי** (PREMIUM HOOK): משפט פתיחה אחד דרמטי, ציורי, שגורם לקורא להרגיש שהוא חייב להמשיך לקרוא. לא שיווקי ולא קלישאתי — אלא חכם, מקצועי, עם נימה של סיפור. דוגמאות לסגנון:
-   - "כשכל העולם עוד מדבר על צ'אטבוטים, אנתרופיק כבר בנתה את CLI שלה מטיפוסי משגר לחדר המלחמה האוטונומי של Agent Teams."
-   - "אם עד היום הייתם 'הידיים' על המקלדת, מהיום אתם המנכ"ל."
-
-2. **תוכן מועשר** (3-5 פסקאות): שלב תובנות מכל שלושת האנליסטים באופן טבעי בתוך הטקסט. אל תכתוב "לפי מרטי קייגן..." — פשוט שלב את הזוויות בצורה אורגנית. הטון: מקצועי, ישיר, כמו שיחה בין שני מומחים. עברית טבעית ורהוטה.
-
-3. **הצדקת ה-1%** (THE 1% CASE): פסקה אחת קצרה — למה הידיעה הזו שרדה את הפילטר ומה עושה אותה לאחוז העליון של מה שקורה ב-AI עכשיו.
-
-4. **פסק דין האוצר** (CURATOR'S VERDICT): ציטוט אחד נועז ומקצועי, בגוף ראשון, שמסכם את החשיבות של הידיעה. 1-2 משפטים בלבד. דוגמה:
-   - "ההשוואה השתנתה: ה-Execution הפך לקומודיטי. אם אתם עדיין שוכרים צוותים שלמים רק כדי להעביר פיקסלים למסך, אתם משחקים את המשחק הישן."
-
-החזר JSON בלבד:
+EXAMPLE 1 — Manus AI:
 {
-  "hook": "ההוק הקולנועי",
-  "content": "התוכן המועשר עם תובנות 3 האנליסטים",
-  "justification": "הצדקת ה-1%",
-  "verdict": "פסק דין האוצר"
+  "hook": "הסוכן האוטונומי שמתחיל לבצע: Manus AI מייתרת את ה-SaaS המסורתי.",
+  "content": "בניגוד למודלי שיחה (Chatbots), ה-Action Engine של Manus פועל כ-Agent אוטונומי אמיתי. הוא לא רק 'עוזר' אלא מבצע משימות מורכבות מקצה לקצה בתוך דפדפן ואפליקציות. לפי מודל Cagan, זהו פתרון ל-Friction הקריטי ביותר ב-SaaS כיום: הצורך של המשתמש לבצע אינטגרציה ידנית בין כלים שונים. כאן, הממשק הוא הפעולה עצמה.",
+  "justification": "סוכנים שמבצעים (Doing Agents) הם הקטגוריה הבאה — לא Copilots שרק מציעים.",
+  "verdict": "תשכחו מ-Copilots שרק מציעים הצעות. הסוכנים האוטונומיים שמבצעים (Doing Agents) הם ה-Blue Ocean האמיתי של 2026."
+}
+
+EXAMPLE 2 — Groq LPU v2:
+{
+  "hook": "עידן ה-Zero Latency: התשתית של Groq הופכת את ה-Inference בזמן אמת לסטנדרט התעשייתי.",
+  "content": "המעבר לדור השני של ה-LPU מאפשר מהירויות Inference שמשנות את ה-UX מן היסוד. זה לא שיפור ליניארי אלא שינוי פרדיגמה שמאפשר 'מחשבה' מורכבת בזמן אמת ללא השהייה. פול גרהם היה מזהה כאן 'Secret' טכנולוגי שיוצר יתרון לא הוגן (Unfair Advantage) לכל אפליקציה שתשתמש בתשתית הזו על פני GPU מסורתי.",
+  "justification": "תשתית Inference חדשה שמשנה את סטנדרט ה-UX לכל האפליקציות.",
+  "verdict": "מי שלא בונה על Latency נמוך ב-2026, בונה מוצר שמרגיש כמו עבר. המהירות היא הפיצ'ר הכי חשוב שלכם."
+}
+
+EXAMPLE 3 — OpenAI Sora API:
+{
+  "hook": "הוליווד ב-API: פתיחת הגישה ל-Sora משנה את כללי המשחק של ה-Production.",
+  "content": "הפיכת הווידאו הגנרטיבי ל-Infrastructure זמין ב-API מאפשרת פרסונליזציה של תוכן ויזואלי בקנה מידה קולנועי. זהו מודל 'Raise' קלאסי ב-ERRC: העלאת איכות הווידאו לרמה מקצועית תוך הפחתת עלויות ההפקה (Eliminate/Reduce) לאפס כמעט. מדובר בשיבוש מוחלט של שרשרת הערך המסורתית במדיה.",
+  "justification": "תשתית וידאו גנרטיבית ב-API — הכוח עובר מהפקה להפצה.",
+  "verdict": "הכוח עובר סופית מהפקה להפצה. בעידן שבו וידאו הוא 'זול' לייצור, הערך נמצא באוצרות (Curation) ובסיפור."
 }`;
+
+    const userPrompt = `Refine this signal into premium Hebrew content:
+
+Title: ${title}
+Section: ${section}
+Tag: ${tag}
+Excerpt: ${excerpt}
+Content:
+${content}
+
+Return JSON only: {"hook": "...", "content": "...", "justification": "...", "verdict": "..."}`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -189,13 +206,13 @@ ${content}
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-3-pro-preview",
         messages: [
           {
             role: "system",
-            content: "אתה מנוע זיקוק תוכן פרימיום. אתה כותב עברית ברמה הגבוהה ביותר — טבעית, רהוטה, מקצועית, כמעט אנושית לגמרי. אתה לא משתמש בקלישאות שיווקיות. אתה תמיד מחזיר JSON תקין בלבד.",
+            content: systemInstruction,
           },
-          { role: "user", content: refinementPrompt },
+          { role: "user", content: userPrompt },
         ],
         temperature: 0.7,
       }),
@@ -203,7 +220,7 @@ ${content}
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error(`Refinement API error: ${response.status}`, errText);
+      console.error(`Super-Mentor API error: ${response.status}`, errText);
       if (response.status === 429 || response.status === 402) {
         console.warn("Rate/payment limited on refinement — skipping");
         return null;
@@ -279,15 +296,13 @@ Deno.serve(async (req) => {
     const auth = await validateAdminAuth(req);
     if (!auth.ok) return auth.error!;
 
-    const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY");
-    if (!PERPLEXITY_API_KEY) {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "Perplexity not configured" }),
+        JSON.stringify({ error: "AI Gateway not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -406,65 +421,76 @@ Deno.serve(async (req) => {
 דחה רק אם התוכן עוסק בעיקר בנתונים פיננסיים (מניות, גיוסי הון, שווי שוק) ולא במוצר/טכנולוגיה.\n`
           : "";
           
-        const prompt = `אתה עורך תוכן מקצועי לאתר חדשות AI בעברית המיועד ל-power users ומפתחים.
+        const sectionsText = Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n");
+        
+        const prompt = `You are 'The AI Curator' — an elite content filter for a premium Israeli AI news site targeting power users and developers.
+
+CURRENT DATE: ${new Date().toISOString().split("T")[0]}
 ${primaryNote}
-הסגנון שלך:
-- תמציתי ומקצועי, לא שיווקי ולא מכירתי
-- לא העתק-הדבק מהמקור — שכתוב במילים שלך
-- כתוב כאילו אתה מספר לחבר מקצוען מה חדש
-- בלי סיסמאות שיווקיות, בלי "שינוי כללי המשחק", בלי הגזמות
-- עברית טבעית ורהוטה
+SIGNAL SCORING (0-100) — use Marty Cagan's Value Test + Paul Graham's Signal Test:
+- 95-100: Critical paradigm shift (new model architecture, major product launch, closed-beta leak)
+- 80-94: Significant technical update or strategic pivot by a top-20 AI entity
+- <80: Not worth publishing — reject
 
-סינון חובה — דחה את התוכן (reject: true) אם הוא:
-- תוכן שיווקי, קידום עצמי, או מכירת מוצר/שירות (כמו "X tools for $Y/mo", "limited time offer"). חשוב: הודעה רשמית מחברת AI על מוצר חדש שלה היא לא תוכן שיווקי — זו חדשות!
-- מדריך גנרי למתחילים (כמו "how to write prompts", "10 AI tips for beginners")
-- תוכן שיווקי מוסווה כתוכן ערך (self-promotion של הפרופיל שפרסם)
-- תוכן ריק מתוכן (רק קישורים, רק אימוג'ים, או שרשור קידומי)
-- פילוסופיה כללית על AI ללא מידע חדש קונקרטי
-- תוכן כללי של דף בית של חברה ללא חדשות ספציפיות (כגון "Welcome to OpenAI", "Google Labs homepage")
-- כתבות כלכליות/פיננסיות שעוסקות בעיקר ב: השקעות, גיוסי הון, שווי שוק, מניות, בורסה, דוחות כספיים, הכנסות חברות. חשוב: "חברה X משיקה מוצר Y" — זו לא כתבה כלכלית! כתבה כלכלית היא כזו שהמוקד שלה הוא כסף ומספרים פיננסיים.
-- חדשות על מיזוגים, רכישות, או עסקאות עסקיות (M&A) אלא אם יש בהן מידע טכנולוגי משמעותי על מוצר חדש
+EVALUATION CRITERIA:
+1. Penalize marketing fluff, generic tutorials, and financial speculation
+2. Reward technical breakthroughs, agentic shifts, and infrastructure updates
+3. Look for the 'Secret' — non-obvious insights and unfair advantages
 
-חוק טריות — התאריך היום הוא ${new Date().toISOString().split("T")[0]}:
-- תוכן שפורסם ב-7 הימים האחרונים: מותר בכל המדורים
-- תוכן ישן יותר מ-7 ימים: דחה עם reject_reason "חדשות ישנות"
-- אם אתה לא בטוח לגבי התאריך, העדף לאשר (אל תדחה בספק)
+AUTO-REJECT (set reject: true):
+- Marketing/self-promotion, product ads ("X tools for $Y/mo", "limited time offer")
+- Generic beginner tutorials ("how to write prompts", "10 AI tips")
+- Self-promotion disguised as value content
+- Empty content (only links, emojis, or promotional threads)
+- General AI philosophy without concrete new information
+- Company homepage content without specific news
+- Financial/economic articles focused on: investments, funding rounds, market cap, stocks, earnings
+  IMPORTANT: "Company X launches Product Y" is NOT financial — it's tech news!
+- M&A news unless there's significant technological information about a new product
+- Content older than 7 days: reject with reject_reason "חדשות ישנות"
+- If uncertain about date: prefer to approve
+- Recycled or legacy 2024/2025 news
 
 ${topicsContext}
 
-המדורים האפשריים:
-${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n")}
+AVAILABLE SECTIONS:
+${sectionsText}
+CONTENT TO EVALUATE:
+Title: ${suggestion.original_title || "ללא כותרת"}
+Source: ${suggestion.source_url}
+Content: ${(suggestion.original_content || "").substring(0, 4000)}
 
-התוכן המקורי:
-כותרת: ${suggestion.original_title || "ללא כותרת"}
-מקור: ${suggestion.source_url}
-תוכן: ${(suggestion.original_content || "").substring(0, 4000)}
+TASK:
+1. Cross-reference with topic list above. If it doesn't match any topic — reject with "לא רלוונטי לתחומי העניין"
+2. Score the content (0-100) using Signal Test + Value Test
+3. If score < 80 or matches auto-reject criteria:
+   Return: {"reject": true, "reject_reason": "סיבה קצרה", "signal_score": <number>}
+4. If score >= 80 and content is quality:
+   - Write a Hebrew title (concise, professional, non-marketing)
+   - Write 1-2 sentence Hebrew excerpt
+   - Write full Hebrew content (3-5 paragraphs, professional, natural Hebrew)
+   - Classify into the most fitting section
+   - Suggest a short tag (1-2 words)
+   Return: {"reject": false, "signal_score": <number>, "title": "...", "excerpt": "...", "content": "...", "section": "weekly|features|tools|viral", "tag": "...", "topic": "שם_התחום"}
 
-משימה:
-1. קודם כל, הצלב את התוכן עם רשימת התחומים למעלה. אם הוא לא נופל באף תחום — דחה עם reject_reason "לא רלוונטי לתחומי העניין"
-2. בדוק אם התוכן שיווקי/גנרי/ריק — אם כן, החזר {"reject": true, "reject_reason": "..."}
-3. אם התוכן רלוונטי ואיכותי:
-   - כתוב כותרת בעברית (קצרה, ברורה, לא שיווקית, מתארת את הנושא הספציפי)
-   - כתוב תקציר של 1-2 משפטים בעברית
-   - כתוב תוכן מלא בעברית (3-5 פסקאות, תמציתי ומקצועי)
-   - סווג למדור המתאים ביותר מהרשימה
-   - הצע תגית קצרה (1-2 מילים)
-   - ציין את התחום הרלוונטי מהרשימה בשדה topic
+WRITING STYLE:
+- Professional, concise, non-marketing
+- Natural and fluent Hebrew, like telling a professional colleague what's new
+- No marketing clichés, no exaggerations
+- Mix English AI terms naturally (Inference, RAG, Zero-shot, Action Engine, etc.)
 
-החזר את התשובה בפורמט JSON בלבד:
-אם נדחה: {"reject": true, "reject_reason": "סיבה קצרה"}
-אם מאושר: {"reject": false, "title": "...", "excerpt": "...", "content": "...", "section": "weekly|features|tools|viral", "tag": "...", "topic": "שם_התחום"}`;
+Return valid JSON only.`;
 
-        const response = await fetch("https://api.perplexity.ai/chat/completions", {
+        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${PERPLEXITY_API_KEY}`,
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "sonar",
+            model: "google/gemini-3-flash-preview",
             messages: [
-              { role: "system", content: "You are a professional Hebrew content editor. Always respond with valid JSON only, no extra text." },
+              { role: "system", content: "אתה 'The AI Curator' — מנוע סינון תוכן עילית. אתה תמיד מחזיר JSON תקין בלבד, ללא טקסט נוסף." },
               { role: "user", content: prompt },
             ],
             temperature: 0.3,
@@ -473,8 +499,13 @@ ${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n"
 
         if (!response.ok) {
           const errText = await response.text();
-          console.error(`Perplexity error for ${suggestion.id}:`, errText);
-          errors.push(`${suggestion.id}: Perplexity API error ${response.status}`);
+          console.error(`AI Curator error for ${suggestion.id}:`, errText);
+          if (response.status === 429 || response.status === 402) {
+            console.warn("Rate/payment limited — stopping batch");
+            errors.push(`Rate limited (${response.status}) — batch stopped`);
+            break;
+          }
+          errors.push(`${suggestion.id}: AI Gateway error ${response.status}`);
           continue;
         }
 
@@ -490,14 +521,14 @@ ${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n"
             throw new Error("No JSON found in response");
           }
         } catch (parseErr) {
-          console.error(`JSON parse error for ${suggestion.id}:`, rawContent);
+          console.error(`JSON parse error for ${suggestion.id}:`, rawContent.substring(0, 200));
           errors.push(`${suggestion.id}: Failed to parse AI response`);
           continue;
         }
 
-        // Check if AI rejected this content
+        // Check if AI rejected this content (score < 80 or auto-reject)
         if (parsed.reject === true) {
-          console.log(`AI rejected ${suggestion.id}: ${parsed.reject_reason || "promotional/generic"}`);
+          console.log(`❌ Rejected ${suggestion.id} (score: ${parsed.signal_score || "N/A"}): ${parsed.reject_reason || "below threshold"}`);
           await supabase
             .from("content_suggestions")
             .update({
@@ -548,6 +579,7 @@ ${Object.entries(SECTION_DESCRIPTIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n"
 
         // Validate section
         const section = SECTIONS.includes(parsed.section) ? parsed.section : "weekly";
+        console.log(`📊 Signal score ${parsed.signal_score || "N/A"}/100 → ${section} | ${(parsed.title || "").substring(0, 60)}`);
 
         // ============================================================
         // STAGE 2: Super-Mentor Refinement Pipeline
