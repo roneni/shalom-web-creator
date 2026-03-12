@@ -231,6 +231,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      invoke_edge_function: {
+        Args: { function_name: string; payload?: Json }
+        Returns: number
+      }
     }
     Enums: {
       app_role: "admin" | "user"
