@@ -186,10 +186,9 @@ async function filterByEditorialFit(
 
 async function validateAdminAuth(req: Request): Promise<{ ok: boolean; userId: string; error?: Response }> {
   const authHeader = req.headers.get("Authorization") || "";
-  const cronHeader = req.headers.get("x-cron");
   const bearerToken = authHeader.replace("Bearer ", "");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  if (bearerToken === serviceRoleKey || cronHeader === "true") {
+  if (bearerToken === serviceRoleKey) {
     return { ok: true, userId: "system" };
   }
   if (!authHeader.startsWith("Bearer ")) {
