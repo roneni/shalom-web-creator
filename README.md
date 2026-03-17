@@ -1,73 +1,110 @@
-# Welcome to your Lovable project
+# AI Pulse
 
-## Project info
+A Hebrew-language AI news and curation platform. AI Pulse aggregates, filters, and presents the most important developments in artificial intelligence -- written natively in Hebrew, not translated.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+**Live site:** [shalom-web-creator.vercel.app](https://shalom-web-creator.vercel.app)
 
-## How can I edit this code?
+## What It Does
 
-There are several ways of editing your application.
+AI Pulse is a content hub organized into four editorial sections:
 
-**Use Lovable**
+- **Weekly Roundup** -- A curated summary of the most significant AI developments each week
+- **New Features** -- Deep dives into newly released features and capabilities across AI products
+- **Tool Spotlight** -- One AI tool per week, explained with practical use cases
+- **Viral** -- What went viral in the AI world and why it matters
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+The site includes a newsletter signup flow, an admin panel with a Discovery Engine for targeted content scanning, and a content suggestions pipeline backed by Supabase edge functions.
 
-Changes made via Lovable will be committed automatically to this repo.
+## Features
 
-**Use your preferred IDE**
+- Dark-themed editorial design with RTL-first layout
+- Content sections with individual post pages and related post navigation
+- Admin dashboard with source management, content suggestions, and a multi-tier Discovery Engine (domains, subfields, ecosystem targets)
+- Supabase backend with edge functions for content fetching, processing, search, and trending topic discovery
+- Newsletter subscription system
+- Social sharing buttons
+- WCAG AA-compliant contrast ratios
+- Responsive design (mobile through desktop)
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## Tech Stack
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+| Layer       | Technology                                                    |
+|-------------|---------------------------------------------------------------|
+| Framework   | React 18 with TypeScript                                      |
+| Build       | Vite                                                          |
+| Routing     | React Router v6                                               |
+| Styling     | Tailwind CSS 3 with `tailwindcss-animate`                     |
+| Components  | Radix UI primitives via shadcn/ui                             |
+| State       | TanStack React Query                                          |
+| Backend     | Supabase (database, auth, edge functions)                     |
+| Forms       | React Hook Form with Zod validation                           |
+| Charts      | Recharts                                                      |
+| Testing     | Vitest with Testing Library                                   |
+| Deployment  | Vercel                                                        |
 
-Follow these steps:
+## Getting Started
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### Prerequisites
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+- Node.js 18+ or Bun
+- A Supabase project (for backend functionality)
 
-# Step 3: Install the necessary dependencies.
-npm i
+### Installation
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```bash
+git clone https://github.com/roneni/shalom-web-creator.git
+cd shalom-web-creator
+npm install
+```
+
+### Environment Variables
+
+Create a `.env` file in the project root:
+
+```
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+### Development
+
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### Build
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```bash
+npm run build
+```
 
-**Use GitHub Codespaces**
+### Testing
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```bash
+npm run test
+```
 
-## What technologies are used for this project?
+## Project Structure
 
-This project is built with:
+```
+src/
+  components/
+    admin/        -- Admin dashboard (login, sources, discovery, suggestions)
+    home/         -- Homepage sections (hero, hot now, section cards, newsletter CTA)
+    layout/       -- Navbar and footer
+    newsletter/   -- Email subscription form
+    sections/     -- Post card components
+    ui/           -- shadcn/ui component library
+  data/           -- Section definitions, mock content, discovery tree
+  hooks/          -- Custom hooks (posts, admin, toast, mobile detection)
+  integrations/   -- Supabase client and generated types
+  lib/            -- Utilities and admin API layer
+  pages/          -- Route-level page components
+supabase/
+  functions/      -- Edge functions (content fetch, processing, search, trending)
+  migrations/     -- Database schema migrations
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## License
 
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+All rights reserved.
